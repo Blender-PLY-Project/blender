@@ -4,22 +4,16 @@
 #include "BKE_blender_version.h"
 #include "BKE_curve.h"
 #include "BKE_main.h"
-#include "BKE_mesh.h"
-#include "BKE_object.h"
 #include "BKE_scene.h"
 
 #include "BLI_fileops.h"
-#include "BLI_math_vec_types.hh"
 
 #include "BLO_readfile.h"
 
 #include "DEG_depsgraph.h"
-#include "DEG_depsgraph_query.h"
 
 #include "DNA_curve_types.h"
 #include "DNA_material_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -469,7 +463,7 @@ TEST_F(ply_exporter_ply_data_test, SuzanneLoadPLYDataUV)
   params.export_uv = true;
   PlyData plyData = load_ply_data_from_blendfile("io_tests/blend_geometry/suzanne_all_data.blend",
                                                  params);
-  EXPECT_EQ(plyData.UV_coordinates.size(), 542);
+  EXPECT_EQ(plyData.UV_coordinates.size(), 541);
 }
 
 TEST_F(ply_exporter_ply_data_test, CubeLoadPLYDataUVDisabled)

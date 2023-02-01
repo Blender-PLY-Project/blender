@@ -5,14 +5,13 @@
  */
 
 #include "ply_import_binary.hh"
-#include "ply_import_mesh.hh"
 
 #include <fstream>
 
 namespace blender::io::ply {
-PlyData *import_ply_binary(std::ifstream &file, const PlyHeader *header)
+std::unique_ptr<PlyData> import_ply_binary(std::ifstream &file, const PlyHeader *header)
 {
-  PlyData *data = new PlyData;
+  std::unique_ptr<PlyData> data = std::make_unique<PlyData>();
   *data = load_ply_binary(file, header);
   return data;
 }
@@ -119,6 +118,10 @@ PlyData load_ply_binary(std::ifstream &file, const PlyHeader *header)
         /* Loop over the amount of vertex indices in this face. */
         for (uint8_t k = 0; k < count; k++) {
           uint32_t index = read<uint32_t>(file, isBigEndian);
+          /* If the face has a vertex index that is outside the range. */
+          if (index >= data.vertices.size()) {
+            throw std::runtime_error("Vertex index out of bounds");
+          }
           vertex_indices.append(index);
         }
         data.faces.append(vertex_indices);

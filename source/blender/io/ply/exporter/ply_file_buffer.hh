@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstdio>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -33,7 +32,7 @@ namespace blender::io::ply {
  */
 class FileBuffer : private NonMovable {
  private:
-  typedef Vector<char> VectorChar;
+  using VectorChar = Vector<char>;
   Vector<VectorChar> blocks_;
   size_t buffer_chunk_size_;
   const char *filepath_;
@@ -102,7 +101,7 @@ class FileBuffer : private NonMovable {
 
   virtual void write_vertex_end() = 0;
 
-  virtual void write_face(int count, Vector<uint32_t> const &vertex_indices) = 0;
+  virtual void write_face(char count, Vector<uint32_t> const &vertex_indices) = 0;
 
   virtual void write_edge(int first, int second) = 0;
 
@@ -153,7 +152,7 @@ class FileBuffer : private NonMovable {
     bb.insert(bb.end(), buf.begin(), buf.end());
   }
 
-  void write_bytes(Vector<char, 128> &bytes)
+  void write_bytes(Span<char> &bytes)
   {
     ensure_space(bytes.size());
     VectorChar &bb = blocks_.last();

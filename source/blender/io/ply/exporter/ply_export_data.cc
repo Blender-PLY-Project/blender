@@ -4,9 +4,6 @@
  * \ingroup ply
  */
 
-#include <cstdio>
-
-#include "IO_ply.h"
 #include "ply_data.hh"
 #include "ply_file_buffer.hh"
 
@@ -39,7 +36,7 @@ void write_vertices(std::unique_ptr<FileBuffer> &buffer, std::unique_ptr<PlyData
 void write_faces(std::unique_ptr<FileBuffer> &buffer, std::unique_ptr<PlyData> &plyData)
 {
   for (const Vector<uint32_t> &face : plyData->faces) {
-    buffer->write_face(int(face.size()), face);
+    buffer->write_face(char(face.size()), face);
   }
   buffer->write_to_file();
 }

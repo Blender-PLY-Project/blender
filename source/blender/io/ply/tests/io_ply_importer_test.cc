@@ -1,13 +1,14 @@
 #include "testing/testing.h"
 #include "tests/blendfile_loading_base_test.h"
 
+#include "BKE_attribute.hh"
 #include "BKE_curve.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
 
-#include "BLI_math_vec_types.hh"
+#include "BLI_math_vector_types.hh"
 
 #include "BLO_readfile.h"
 
@@ -23,7 +24,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "IO_ply.h"
-#include "intern/ply_data.hh"
+#include "ply_data.hh"
 #include "ply_import.hh"
 #include "ply_import_binary.hh"
 
@@ -91,9 +92,9 @@ class PlyImportTest : public BlendfileLoadingBaseTest {
         ASSERT_EQ(mesh->totpoly, exp.totpoly);
 
         /* Test if first and last vertices match. */
-        const Span<MVert> verts = mesh->verts();
-        EXPECT_V3_NEAR(verts.first().co, exp.vert_first, 0.0001f);
-        EXPECT_V3_NEAR(verts.last().co, exp.vert_last, 0.0001f);
+        const Span<float3> verts = mesh->vert_positions();
+        EXPECT_V3_NEAR(verts.first(), exp.vert_first, 0.0001f);
+        EXPECT_V3_NEAR(verts.last(), exp.vert_last, 0.0001f);
 
         /* Fetch normal data from mesh and test if it matches expectation. */
         /* This uses the normal import workaround for vertex normals. This should be changed when
@@ -107,9 +108,9 @@ class PlyImportTest : public BlendfileLoadingBaseTest {
         }
 
         /* Fetch UV data from mesh and test if it matches expectation. */
-        const MLoopUV *mloopuv = static_cast<const MLoopUV *>(
-            CustomData_get_layer(&mesh->ldata, CD_MLOOPUV));
-        float2 uv_first = mloopuv ? float2(mloopuv->uv) : float2(0, 0);
+        blender::bke::AttributeAccessor attributes = mesh->attributes();
+        VArray<float2> uvs = attributes.lookup<float2>("UVMap");
+        float2 uv_first = !uvs.is_empty() ? uvs[0] : float2(0, 0);
         EXPECT_V2_NEAR(uv_first, exp.uv_first, 0.0001f);
 
         /* Check if expected mesh has vertex colors, and tests if it matches. */
