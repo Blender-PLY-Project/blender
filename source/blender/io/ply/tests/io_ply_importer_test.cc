@@ -84,7 +84,7 @@ class PlyImportTest : public BlendfileLoadingBaseTest {
 
         /* Fetch normal data from mesh and test if it matches expectation. */
         if (BKE_mesh_has_custom_loop_normals(mesh)) {
-          const Span<float3> vertex_normals = mesh->vertex_normals();
+          const Span<float3> vertex_normals = mesh->vert_normals();
           ASSERT_FALSE(vertex_normals.is_empty());
           EXPECT_V3_NEAR(vertex_normals[0], exp.normal_first, 0.0001f);
         }
