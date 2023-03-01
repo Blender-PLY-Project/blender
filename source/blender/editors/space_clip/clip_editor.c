@@ -232,7 +232,7 @@ int ED_space_clip_get_clip_frame_number(const SpaceClip *sc)
 {
   MovieClip *clip = ED_space_clip_get_clip(sc);
 
-  /* Caller must ensure space does have a valid clip, otherwise it will crash, see T45017. */
+  /* Caller must ensure space does have a valid clip, otherwise it will crash, see #45017. */
   return BKE_movieclip_remap_scene_to_clip_frame(clip, sc->user.framenr);
 }
 
@@ -703,10 +703,10 @@ static uchar *prefetch_read_file_to_memory(
   user.render_size = render_size;
   user.render_flag = render_flag;
 
-  char name[FILE_MAX];
-  BKE_movieclip_filename_for_frame(clip, &user, name);
+  char filepath[FILE_MAX];
+  BKE_movieclip_filepath_for_frame(clip, &user, filepath);
 
-  int file = BLI_open(name, O_BINARY | O_RDONLY, 0);
+  int file = BLI_open(filepath, O_BINARY | O_RDONLY, 0);
   if (file == -1) {
     return NULL;
   }

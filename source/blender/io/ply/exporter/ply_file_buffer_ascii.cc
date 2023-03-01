@@ -33,7 +33,7 @@ void FileBufferAscii::write_vertex_end()
   write_fstring("\n");
 }
 
-void FileBufferAscii::write_face(char count, Array<uint32_t> const &vertex_indices)
+void FileBufferAscii::write_face(char count, Span<uint32_t> const &vertex_indices)
 {
   write_fstring("{}", int(count));
 

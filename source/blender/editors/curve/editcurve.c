@@ -1278,7 +1278,7 @@ void ED_curve_editnurb_make(Object *obedit)
 
     if (actkey) {
       // XXX strcpy(G.editModeTitleExtra, "(Key) ");
-      /* TODO(@campbellbarton): undo_system: investigate why this was needed. */
+      /* TODO(@ideasman42): undo_system: investigate why this was needed. */
 #if 0
       undo_editmode_clear();
 #endif
@@ -1429,7 +1429,7 @@ static int separate_exec(bContext *C, wmOperator *op)
 
     /* All curves failed due to the same error. */
     if (status.error_vertex_keys) {
-      BKE_report(op->reports, RPT_ERROR, "Cannot separate curves with vertex keys");
+      BKE_report(op->reports, RPT_ERROR, "Cannot separate curves with shape keys");
     }
     else {
       BLI_assert(status.error_generic);

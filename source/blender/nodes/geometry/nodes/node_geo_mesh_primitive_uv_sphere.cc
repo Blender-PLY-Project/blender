@@ -117,7 +117,6 @@ BLI_NOINLINE static void calculate_sphere_edge_indices(MutableSpan<MEdge> edges,
     MEdge &edge = edges[edge_index++];
     edge.v1 = 0;
     edge.v2 = first_vert_ring_index_start + segment;
-    edge.flag = ME_EDGEDRAW;
   }
 
   int ring_vert_index_start = 1;
@@ -129,7 +128,6 @@ BLI_NOINLINE static void calculate_sphere_edge_indices(MutableSpan<MEdge> edges,
       MEdge &edge = edges[edge_index++];
       edge.v1 = ring_vert_index_start + segment;
       edge.v2 = ring_vert_index_start + ((segment + 1) % segments);
-      edge.flag = ME_EDGEDRAW;
     }
 
     /* Add the edges connecting to the next ring. */
@@ -138,7 +136,6 @@ BLI_NOINLINE static void calculate_sphere_edge_indices(MutableSpan<MEdge> edges,
         MEdge &edge = edges[edge_index++];
         edge.v1 = ring_vert_index_start + segment;
         edge.v2 = next_ring_vert_index_start + segment;
-        edge.flag = ME_EDGEDRAW;
       }
     }
     ring_vert_index_start += segments;
@@ -151,7 +148,6 @@ BLI_NOINLINE static void calculate_sphere_edge_indices(MutableSpan<MEdge> edges,
     MEdge &edge = edges[edge_index++];
     edge.v1 = last_vert_index;
     edge.v2 = last_vert_ring_start + segment;
-    edge.flag = ME_EDGEDRAW;
   }
 }
 
@@ -312,7 +308,6 @@ static Mesh *create_uv_sphere_mesh(const float radius,
 {
   Mesh *mesh = BKE_mesh_new_nomain(sphere_vert_total(segments, rings),
                                    sphere_edge_total(segments, rings),
-                                   0,
                                    sphere_corner_total(segments, rings),
                                    sphere_face_total(segments, rings));
   BKE_id_material_eval_ensure_default_slot(&mesh->id);
@@ -324,10 +319,10 @@ static Mesh *create_uv_sphere_mesh(const float radius,
   threading::parallel_invoke(
       1024 < segments * rings,
       [&]() {
-        MutableSpan vert_normals{
-            reinterpret_cast<float3 *>(BKE_mesh_vertex_normals_for_write(mesh)), mesh->totvert};
+        MutableSpan vert_normals{reinterpret_cast<float3 *>(BKE_mesh_vert_normals_for_write(mesh)),
+                                 mesh->totvert};
         calculate_sphere_vertex_data(positions, vert_normals, radius, segments, rings);
-        BKE_mesh_vertex_normals_clear_dirty(mesh);
+        BKE_mesh_vert_normals_clear_dirty(mesh);
       },
       [&]() { calculate_sphere_edge_indices(edges, segments, rings); },
       [&]() { calculate_sphere_faces(polys, segments); },

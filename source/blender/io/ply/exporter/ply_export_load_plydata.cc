@@ -171,7 +171,7 @@ void load_plydata(PlyData &plyData, Depsgraph *depsgraph, const PLYExportParams 
 
     /* Normals */
     if (export_params.export_normals) {
-      const Span<float3> vert_normals = mesh->vertex_normals();
+      const Span<float3> vert_normals = mesh->vert_normals();
       for (int i = 0; i < vertex_map.size(); i++) {
         mul_m3_v3(world_and_axes_normal_transform_,
                   float3(vert_normals[mesh_vertex_index_LUT[i]]));
@@ -218,12 +218,12 @@ void load_plydata(PlyData &plyData, Depsgraph *depsgraph, const PLYExportParams 
   DEG_OBJECT_ITER_END;
 }
 
-blender::Map<UV_vertex_key, int> generate_vertex_map(const Mesh *mesh,
+Map<UV_vertex_key, int> generate_vertex_map(const Mesh *mesh,
                                                      const float2 *uv_map,
                                                      const PLYExportParams &export_params)
 {
 
-  blender::Map<UV_vertex_key, int> vertex_map;
+  Map<UV_vertex_key, int> vertex_map;
 
   const Span<MPoly> polys = mesh->polys();
   const Span<MLoop> loops = mesh->loops();

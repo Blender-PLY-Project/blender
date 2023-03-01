@@ -85,7 +85,8 @@ void MorphologicalDistanceFeatherWeights::compute_weights(int radius)
     weights[i] /= sum;
   }
 
-  weights_texture_ = GPU_texture_create_1d("Weights", size, 1, GPU_R16F, weights.data());
+  weights_texture_ = GPU_texture_create_1d(
+      "Weights", size, 1, GPU_R16F, GPU_TEXTURE_USAGE_GENERAL, weights.data());
 }
 
 /* Computes a falloff that is equal to 1 at an input of zero and decrease to zero at an input of 1,
@@ -129,13 +130,13 @@ void MorphologicalDistanceFeatherWeights::compute_distance_falloffs(int type, in
   }
 
   distance_falloffs_texture_ = GPU_texture_create_1d(
-      "Distance Factors", size, 1, GPU_R16F, falloffs.data());
+      "Distance Factors", size, 1, GPU_R16F, GPU_TEXTURE_USAGE_GENERAL, falloffs.data());
 }
 
 void MorphologicalDistanceFeatherWeights::bind_weights_as_texture(GPUShader *shader,
                                                                   const char *texture_name) const
 {
-  const int texture_image_unit = GPU_shader_get_texture_binding(shader, texture_name);
+  const int texture_image_unit = GPU_shader_get_sampler_binding(shader, texture_name);
   GPU_texture_bind(weights_texture_, texture_image_unit);
 }
 
@@ -147,7 +148,7 @@ void MorphologicalDistanceFeatherWeights::unbind_weights_as_texture() const
 void MorphologicalDistanceFeatherWeights::bind_distance_falloffs_as_texture(
     GPUShader *shader, const char *texture_name) const
 {
-  const int texture_image_unit = GPU_shader_get_texture_binding(shader, texture_name);
+  const int texture_image_unit = GPU_shader_get_sampler_binding(shader, texture_name);
   GPU_texture_bind(distance_falloffs_texture_, texture_image_unit);
 }
 

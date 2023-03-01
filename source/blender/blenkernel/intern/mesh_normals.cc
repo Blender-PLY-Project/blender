@@ -42,6 +42,7 @@
 using blender::BitVector;
 using blender::float3;
 using blender::int2;
+using blender::MutableBitSpan;
 using blender::MutableSpan;
 using blender::short2;
 using blender::Span;
@@ -105,7 +106,7 @@ void BKE_mesh_normals_tag_dirty(Mesh *mesh)
   mesh->runtime->poly_normals_dirty = true;
 }
 
-float (*BKE_mesh_vertex_normals_for_write(Mesh *mesh))[3]
+float (*BKE_mesh_vert_normals_for_write(Mesh *mesh))[3]
 {
   if (mesh->runtime->vert_normals == nullptr) {
     mesh->runtime->vert_normals = (float(*)[3])MEM_malloc_arrayN(
@@ -129,7 +130,7 @@ float (*BKE_mesh_poly_normals_for_write(Mesh *mesh))[3]
   return mesh->runtime->poly_normals;
 }
 
-void BKE_mesh_vertex_normals_clear_dirty(Mesh *mesh)
+void BKE_mesh_vert_normals_clear_dirty(Mesh *mesh)
 {
   mesh->runtime->vert_normals_dirty = false;
   BLI_assert(mesh->runtime->vert_normals || mesh->totvert == 0);
@@ -141,7 +142,7 @@ void BKE_mesh_poly_normals_clear_dirty(Mesh *mesh)
   BLI_assert(mesh->runtime->poly_normals || mesh->totpoly == 0);
 }
 
-bool BKE_mesh_vertex_normals_are_dirty(const Mesh *mesh)
+bool BKE_mesh_vert_normals_are_dirty(const Mesh *mesh)
 {
   return mesh->runtime->vert_normals_dirty;
 }
@@ -367,9 +368,9 @@ void BKE_mesh_calc_normals_poly_and_vertex(const float (*vert_positions)[3],
 /** \name Mesh Normal Calculation
  * \{ */
 
-const float (*BKE_mesh_vertex_normals_ensure(const Mesh *mesh))[3]
+const float (*BKE_mesh_vert_normals_ensure(const Mesh *mesh))[3]
 {
-  if (!BKE_mesh_vertex_normals_are_dirty(mesh)) {
+  if (!BKE_mesh_vert_normals_are_dirty(mesh)) {
     BLI_assert(mesh->runtime->vert_normals != nullptr || mesh->totvert == 0);
     return mesh->runtime->vert_normals;
   }
@@ -379,7 +380,7 @@ const float (*BKE_mesh_vertex_normals_ensure(const Mesh *mesh))[3]
   }
 
   std::lock_guard lock{mesh->runtime->normals_mutex};
-  if (!BKE_mesh_vertex_normals_are_dirty(mesh)) {
+  if (!BKE_mesh_vert_normals_are_dirty(mesh)) {
     BLI_assert(mesh->runtime->vert_normals != nullptr);
     return mesh->runtime->vert_normals;
   }
@@ -394,7 +395,7 @@ const float (*BKE_mesh_vertex_normals_ensure(const Mesh *mesh))[3]
     const Span<MPoly> polys = mesh_mutable.polys();
     const Span<MLoop> loops = mesh_mutable.loops();
 
-    vert_normals = BKE_mesh_vertex_normals_for_write(&mesh_mutable);
+    vert_normals = BKE_mesh_vert_normals_for_write(&mesh_mutable);
     poly_normals = BKE_mesh_poly_normals_for_write(&mesh_mutable);
 
     BKE_mesh_calc_normals_poly_and_vertex(reinterpret_cast<const float(*)[3]>(positions.data()),
@@ -406,7 +407,7 @@ const float (*BKE_mesh_vertex_normals_ensure(const Mesh *mesh))[3]
                                           poly_normals,
                                           vert_normals);
 
-    BKE_mesh_vertex_normals_clear_dirty(&mesh_mutable);
+    BKE_mesh_vert_normals_clear_dirty(&mesh_mutable);
     BKE_mesh_poly_normals_clear_dirty(&mesh_mutable);
   });
 
@@ -460,7 +461,7 @@ void BKE_mesh_ensure_normals_for_display(Mesh *mesh)
   switch (mesh->runtime->wrapper_type) {
     case ME_WRAPPER_TYPE_SUBD:
     case ME_WRAPPER_TYPE_MDATA:
-      BKE_mesh_vertex_normals_ensure(mesh);
+      BKE_mesh_vert_normals_ensure(mesh);
       BKE_mesh_poly_normals_ensure(mesh);
       break;
     case ME_WRAPPER_TYPE_BMESH: {
@@ -480,7 +481,7 @@ void BKE_mesh_calc_normals(Mesh *mesh)
 #ifdef DEBUG_TIME
   SCOPED_TIMER_AVERAGED(__func__);
 #endif
-  BKE_mesh_vertex_normals_ensure(mesh);
+  BKE_mesh_vert_normals_ensure(mesh);
 }
 
 void BKE_lnor_spacearr_init(MLoopNorSpaceArray *lnors_spacearr,
@@ -919,7 +920,7 @@ static void loop_manifold_fan_around_vert_next(const Span<MLoop> loops,
   const uint vert_fan_next = loops[*r_mlfan_curr_index].v;
   const MPoly &mpfan_next = polys[*r_mpfan_curr_index];
   if ((vert_fan_orig == vert_fan_next && vert_fan_orig == mv_pivot_index) ||
-      (!ELEM(vert_fan_orig, vert_fan_next, mv_pivot_index))) {
+      !ELEM(vert_fan_orig, vert_fan_next, mv_pivot_index)) {
     /* We need the previous loop, but current one is our vertex's loop. */
     *r_mlfan_vert_index = *r_mlfan_curr_index;
     if (--(*r_mlfan_curr_index) < mpfan_next.loopstart) {
@@ -1238,7 +1239,7 @@ static bool loop_split_generator_check_cyclic_smooth_fan(const Span<MLoop> mloop
                                                          const Span<int2> edge_to_loops,
                                                          const Span<int> loop_to_poly,
                                                          const int *e2l_prev,
-                                                         BitVector<> &skip_loops,
+                                                         MutableBitSpan skip_loops,
                                                          const int ml_curr_index,
                                                          const int ml_prev_index,
                                                          const int mp_curr_index)
@@ -1749,7 +1750,7 @@ static void mesh_normals_loop_custom_set(const float (*positions)[3],
       /* We also have to check between last and first loops,
        * otherwise we may miss some sharp edges here!
        * This is just a simplified version of above while loop.
-       * See T45984. */
+       * See #45984. */
       loops = lnors_spacearr.lspacearr[i]->loops;
       if (loops && org_nor) {
         const int lidx = POINTER_AS_INT(loops->link);
@@ -1931,7 +1932,7 @@ static void mesh_set_custom_normals(Mesh *mesh, float (*r_custom_nors)[3], const
       "sharp_edge", ATTR_DOMAIN_EDGE);
 
   mesh_normals_loop_custom_set(reinterpret_cast<const float(*)[3]>(positions.data()),
-                               BKE_mesh_vertex_normals_ensure(mesh),
+                               BKE_mesh_vert_normals_ensure(mesh),
                                positions.size(),
                                edges.data(),
                                edges.size(),

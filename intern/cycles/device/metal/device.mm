@@ -55,6 +55,9 @@ void device_metal_info(vector<DeviceInfo> &devices)
     info.denoisers = DENOISER_NONE;
     info.id = id;
 
+    info.has_nanovdb = MetalInfo::get_device_vendor(device) == METAL_GPU_APPLE;
+    info.has_light_tree = MetalInfo::get_device_vendor(device) != METAL_GPU_AMD;
+
     devices.push_back(info);
     device_index++;
   }

@@ -114,32 +114,6 @@ static CustomData *mesh_customdata_get_type(Mesh *me, const char htype, int *r_t
 }
 
 #define GET_CD_DATA(me, data) ((me)->edit_mesh ? &(me)->edit_mesh->bm->data : &(me)->data)
-static void delete_customdata_layer(Mesh *me, CustomDataLayer *layer)
-{
-  const int type = layer->type;
-  CustomData *data;
-  int layer_index, tot, n;
-
-  char htype = BM_FACE;
-  if (ELEM(type, CD_PROP_BYTE_COLOR, CD_PROP_FLOAT2)) {
-    htype = BM_LOOP;
-  }
-  else if (ELEM(type, CD_PROP_COLOR)) {
-    htype = BM_VERT;
-  }
-
-  data = mesh_customdata_get_type(me, htype, &tot);
-  layer_index = CustomData_get_layer_index(data, type);
-  n = (layer - &data->layers[layer_index]);
-  BLI_assert(n >= 0 && (n + layer_index) < data->totlayer);
-
-  if (me->edit_mesh) {
-    BM_data_layer_free_n(me->edit_mesh->bm, data, type, n);
-  }
-  else {
-    CustomData_free_layer(data, type, tot, layer_index + n);
-  }
-}
 
 static void mesh_uv_reset_array(float **fuv, const int len)
 {
@@ -234,8 +208,8 @@ void ED_mesh_uv_loop_reset_ex(Mesh *me, const int layernum)
     float2 *mloopuv = static_cast<float2 *>(
         CustomData_get_layer_n_for_write(&me->ldata, CD_PROP_FLOAT2, layernum, me->totloop));
 
-    const MPoly *polys = BKE_mesh_polys(me);
-    for (int i = 0; i < me->totpoly; i++) {
+    const blender::Span<MPoly> polys = me->polys();
+    for (const int i : polys.index_range()) {
       mesh_uv_reset_mface(&polys[i], mloopuv);
     }
   }
@@ -417,59 +391,12 @@ void ED_mesh_uv_ensure(Mesh *me, const char *name)
   }
 }
 
-bool ED_mesh_uv_remove_index(Mesh *me, const int n)
-{
-  CustomData *ldata = GET_CD_DATA(me, ldata);
-  CustomDataLayer *cdlu;
-  int index;
-
-  index = CustomData_get_layer_index_n(ldata, CD_PROP_FLOAT2, n);
-  cdlu = (index == -1) ? nullptr : &ldata->layers[index];
-
-  if (!cdlu) {
-    return false;
-  }
-
-  delete_customdata_layer(me, cdlu);
-
-  DEG_id_tag_update(&me->id, 0);
-  WM_main_add_notifier(NC_GEOM | ND_DATA, me);
-
-  return true;
-}
-bool ED_mesh_uv_remove_active(Mesh *me)
-{
-  CustomData *ldata = GET_CD_DATA(me, ldata);
-  const int n = CustomData_get_active_layer(ldata, CD_PROP_FLOAT2);
-
-  if (n != -1) {
-    return ED_mesh_uv_remove_index(me, n);
-  }
-  return false;
-}
-bool ED_mesh_uv_remove_named(Mesh *me, const char *name)
-{
-  CustomData *ldata = GET_CD_DATA(me, ldata);
-  const int n = CustomData_get_named_layer(ldata, CD_PROP_FLOAT2, name);
-  if (n != -1) {
-    return ED_mesh_uv_remove_index(me, n);
-  }
-  return false;
-}
-
 int ED_mesh_color_add(
     Mesh *me, const char *name, const bool active_set, const bool do_init, ReportList *reports)
 {
   /* If no name is supplied, provide a backwards compatible default. */
   if (!name) {
     name = "Col";
-  }
-
-  if (const CustomDataLayer *layer = BKE_id_attribute_find(
-          &me->id, me->active_color_attribute, CD_PROP_BYTE_COLOR, ATTR_DOMAIN_CORNER)) {
-    int dummy;
-    const CustomData *data = mesh_customdata_get_type(me, BM_LOOP, &dummy);
-    return CustomData_get_named_layer(data, CD_PROP_BYTE_COLOR, layer->name);
   }
 
   CustomDataLayer *layer = BKE_id_attribute_new(
@@ -518,6 +445,7 @@ bool ED_mesh_color_ensure(Mesh *me, const char *name)
   }
 
   BKE_id_attributes_active_color_set(&me->id, unique_name);
+  BKE_id_attributes_default_color_set(&me->id, unique_name);
   BKE_mesh_tessface_clear(me);
   DEG_id_tag_update(&me->id, 0);
 
@@ -644,6 +572,9 @@ static int mesh_uv_texture_remove_exec(bContext *C, wmOperator *op)
     ED_paint_proj_mesh_data_check(scene, ob, nullptr, nullptr, nullptr, nullptr);
     WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, nullptr);
   }
+
+  DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_GEOM | ND_DATA, me);
 
   return OPERATOR_FINISHED;
 }
@@ -1260,11 +1191,6 @@ static void mesh_add_edges(Mesh *mesh, int len)
 
   mesh->totedge = totedge;
 
-  MutableSpan<MEdge> edges = mesh->edges_for_write();
-  for (MEdge &edge : edges.take_back(len)) {
-    edge.flag = ME_EDGEDRAW;
-  }
-
   bke::MutableAttributeAccessor attributes = mesh->attributes_for_write();
   bke::SpanAttributeWriter<bool> select_edge = attributes.lookup_or_add_for_write_span<bool>(
       ".select_edge", ATTR_DOMAIN_EDGE);
@@ -1539,8 +1465,13 @@ void ED_mesh_split_faces(Mesh *mesh)
   const Span<MPoly> polys = mesh->polys();
   const Span<MLoop> loops = mesh->loops();
   const float split_angle = (mesh->flag & ME_AUTOSMOOTH) != 0 ? mesh->smoothresh : float(M_PI);
+  const bke::AttributeAccessor attributes = mesh->attributes();
+  const VArray<bool> mesh_sharp_edges = attributes.lookup_or_default<bool>(
+      "sharp_edge", ATTR_DOMAIN_EDGE, false);
 
-  Array<bool> sharp_edges(mesh->totedge, false);
+  Array<bool> sharp_edges(mesh->totedge);
+  mesh_sharp_edges.materialize(sharp_edges);
+
   BKE_edges_sharp_from_angle_set(mesh->totedge,
                                  loops.data(),
                                  loops.size(),

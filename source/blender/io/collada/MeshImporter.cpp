@@ -491,6 +491,8 @@ void MeshImporter::allocate_poly_data(COLLADAFW::Mesh *collada_mesh, Mesh *me)
       }
       BKE_id_attributes_active_color_set(
           &me->id, CustomData_get_layer_name(&me->ldata, CD_PROP_BYTE_COLOR, 0));
+      BKE_id_attributes_default_color_set(
+          &me->id, CustomData_get_layer_name(&me->ldata, CD_PROP_BYTE_COLOR, 0));
     }
   }
 }
@@ -562,15 +564,6 @@ void MeshImporter::mesh_add_edges(Mesh *mesh, int len)
 
   CustomData_free(&mesh->edata, mesh->totedge);
   mesh->edata = edata;
-
-  MutableSpan<MEdge> edges = mesh->edges_for_write();
-
-  /* set default flags */
-  medge = &edges[mesh->totedge];
-  for (int i = 0; i < len; i++, medge++) {
-    medge->flag = ME_EDGEDRAW;
-  }
-
   mesh->totedge = totedge;
 }
 

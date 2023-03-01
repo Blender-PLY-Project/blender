@@ -30,7 +30,7 @@
 #include "RNA_access.h"
 #include "RNA_prototypes.h"
 
-#include "BLI_float4x4.hh"
+#include "BLI_math_matrix_types.hh"
 #include "BLI_math_vector.h"
 #include "BLI_span.hh"
 #include "BLI_timeit.hh"
@@ -120,7 +120,7 @@ static void panelRegister(ARegionType *region_type)
 
 static Mesh *create_empty_mesh(const Mesh *input_mesh)
 {
-  Mesh *new_mesh = BKE_mesh_new_nomain(0, 0, 0, 0, 0);
+  Mesh *new_mesh = BKE_mesh_new_nomain(0, 0, 0, 0);
   BKE_mesh_copy_parameters_for_eval(new_mesh, input_mesh);
   return new_mesh;
 }

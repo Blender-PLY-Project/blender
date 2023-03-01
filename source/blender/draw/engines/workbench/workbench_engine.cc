@@ -15,6 +15,8 @@
 
 #include "workbench_private.hh"
 
+#include "workbench_engine.h" /* Own include. */
+
 namespace blender::workbench {
 
 using namespace draw;
@@ -502,9 +504,11 @@ static bool workbench_render_framebuffers_init(void)
    * the other views will reuse these buffers */
   if (dtxl->color == nullptr) {
     BLI_assert(dtxl->depth == nullptr);
-    dtxl->color = GPU_texture_create_2d("txl.color", size.x, size.y, 1, GPU_RGBA16F, nullptr);
+    eGPUTextureUsage usage = GPU_TEXTURE_USAGE_GENERAL;
+    dtxl->color = GPU_texture_create_2d(
+        "txl.color", size.x, size.y, 1, GPU_RGBA16F, usage, nullptr);
     dtxl->depth = GPU_texture_create_2d(
-        "txl.depth", size.x, size.y, 1, GPU_DEPTH24_STENCIL8, nullptr);
+        "txl.depth", size.x, size.y, 1, GPU_DEPTH24_STENCIL8, usage, nullptr);
   }
 
   if (!(dtxl->depth && dtxl->color)) {
@@ -639,7 +643,7 @@ static void workbench_render_to_image(void *vedata,
   float4x4 winmat, viewmat, viewinv;
   RE_GetCameraWindow(engine->re, camera_ob, winmat.ptr());
   RE_GetCameraModelMatrix(engine->re, camera_ob, viewinv.ptr());
-  viewmat = viewinv.inverted();
+  viewmat = math::invert(viewinv);
 
   DRWView *view = DRW_view_create(viewmat.ptr(), winmat.ptr(), nullptr, nullptr, nullptr);
   DRW_view_default_set(view);

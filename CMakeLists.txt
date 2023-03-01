@@ -525,7 +525,7 @@ endif()
 if(NOT APPLE)
   option(WITH_CYCLES_DEVICE_HIP        "Enable Cycles AMD HIP support" ON)
   option(WITH_CYCLES_HIP_BINARIES      "Build Cycles AMD HIP binaries" OFF)
-  set(CYCLES_HIP_BINARIES_ARCH gfx1010 gfx1011 gfx1012 gfx1030 gfx1031 gfx1032 gfx1034 gfx1035 gfx1100 gfx1101 gfx1102 CACHE STRING "AMD HIP architectures to build binaries for")
+  set(CYCLES_HIP_BINARIES_ARCH gfx900 gfx906 gfx90c gfx902 gfx1010 gfx1011 gfx1012 gfx1030 gfx1031 gfx1032 gfx1034 gfx1035 gfx1100 gfx1101 gfx1102 CACHE STRING "AMD HIP architectures to build binaries for")
   mark_as_advanced(WITH_CYCLES_DEVICE_HIP)
   mark_as_advanced(CYCLES_HIP_BINARIES_ARCH)
 endif()
@@ -626,8 +626,10 @@ mark_as_advanced(
 
 # Vulkan
 option(WITH_VULKAN_BACKEND "Enable Vulkan as graphics backend (only for development)" OFF)
+option(WITH_VULKAN_GUARDEDALLOC "Use guardedalloc for host allocations done inside Vulkan (development option)" OFF)
 mark_as_advanced(
   WITH_VULKAN_BACKEND
+  WITH_VULKAN_GUARDEDALLOC
 )
 
 # Metal
@@ -953,21 +955,6 @@ endif()
 # -----------------------------------------------------------------------------
 # Check if Sub-modules are Cloned
 
-if(WITH_INTERNATIONAL)
-  file(GLOB RESULT "${CMAKE_SOURCE_DIR}/release/datafiles/locale")
-  list(LENGTH RESULT DIR_LEN)
-  if(DIR_LEN EQUAL 0)
-    message(
-      WARNING
-      "Translation path '${CMAKE_SOURCE_DIR}/release/datafiles/locale' is missing, "
-      "This is a 'git submodule', which are known not to work with bridges to other version "
-      "control systems."
-    )
-    set(TRANSLATIONS_FOUND OFF)
-    set_and_warn_library_found("Translations" TRANSLATIONS_FOUND WITH_INTERNATIONAL)
-  endif()
-endif()
-
 if(WITH_PYTHON)
   # While we have this as an '#error' in 'bpy_capi_utils.h',
   # upgrading Python tends to cause confusion for users who build.
@@ -983,14 +970,14 @@ if(WITH_PYTHON)
     )
   endif()
 
-  file(GLOB RESULT "${CMAKE_SOURCE_DIR}/release/scripts/addons")
+  file(GLOB RESULT "${CMAKE_SOURCE_DIR}/scripts/addons")
   list(LENGTH RESULT DIR_LEN)
   if(DIR_LEN EQUAL 0)
     message(
       WARNING
-      "Addons path '${CMAKE_SOURCE_DIR}/release/scripts/addons' is missing, "
-      "This is a 'git submodule', which are known not to work with bridges to other version "
-      "control systems: * CONTINUING WITHOUT ADDONS *"
+      "Addons path '${CMAKE_SOURCE_DIR}/scripts/addons' is missing. "
+      "This is an external repository which needs to be checked out. Use `make update` to do so. "
+      "* CONTINUING WITHOUT ADDONS *"
     )
   endif()
 endif()

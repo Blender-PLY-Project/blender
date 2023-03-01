@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
+#include "BLI_math_matrix.hh"
+
 #include "pbvh_uv_islands.hh"
 
 #include <optional>
@@ -47,7 +49,7 @@ static int primitive_get_other_uv_vertex(const MeshData &mesh_data,
                   mesh_loops[looptri.tri[2]].v));
   for (const int loop : looptri.tri) {
     const int vert = mesh_loops[loop].v;
-    if (vert != v1 && vert != v2) {
+    if (!ELEM(vert, v1, v2)) {
       return vert;
     }
   }
@@ -198,15 +200,13 @@ static void mesh_data_init(MeshData &mesh_data)
 
 MeshData::MeshData(const Span<MLoopTri> looptris,
                    const Span<MLoop> loops,
-                   const int verts_num,
                    const Span<float2> uv_map,
-                   const Span<float3> vertex_positions)
+                   const Span<float3> vert_positions)
     : looptris(looptris),
-      verts_num(verts_num),
       loops(loops),
       uv_map(uv_map),
-      vertex_positions(vertex_positions),
-      vert_to_edge_map(verts_num),
+      vert_positions(vert_positions),
+      vert_to_edge_map(vert_positions.size()),
       edge_to_primitive_map(0),
       primitive_to_edge_map(looptris.size())
 {
@@ -1083,7 +1083,7 @@ void UVIsland::print_debug(const MeshData &mesh_data) const
   ss << "import mathutils\n";
 
   ss << "uvisland_vertices = [\n";
-  for (const float3 &vertex_position : mesh_data.vertex_positions) {
+  for (const float3 &vertex_position : mesh_data.vert_positions) {
     ss << "  mathutils.Vector((" << vertex_position.x << ", " << vertex_position.y << ", "
        << vertex_position.z << ")),\n";
   }
@@ -1243,14 +1243,14 @@ UVBorderCorner::UVBorderCorner(UVBorderEdge *first, UVBorderEdge *second, float 
 
 float2 UVBorderCorner::uv(float factor, float min_uv_distance)
 {
+  using namespace blender::math;
   float2 origin = first->get_uv_vertex(1)->uv;
   float angle_between = angle * factor;
   float desired_len = max_ff(second->length() * factor + first->length() * (1.0 - factor),
                              min_uv_distance);
-  float2 v = first->get_uv_vertex(0)->uv - origin;
-  normalize_v2(v);
+  float2 v = normalize(first->get_uv_vertex(0)->uv - origin);
 
-  float3x3 rot_mat = float3x3::from_rotation(angle_between);
+  float2x2 rot_mat = from_rotation<float2x2>(AngleRadian(angle_between));
   float2 rotated = rot_mat * v;
   float2 result = rotated * desired_len + first->get_uv_vertex(1)->uv;
   return result;

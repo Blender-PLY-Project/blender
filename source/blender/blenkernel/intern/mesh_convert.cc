@@ -120,8 +120,6 @@ static void make_edges_mdata_extend(Mesh &mesh)
          BLI_edgehashIterator_step(ehi), ++medge, e_index++) {
       BLI_edgehashIterator_getKey(ehi, &medge->v1, &medge->v2);
       BLI_edgehashIterator_setValue(ehi, POINTER_FROM_UINT(e_index));
-
-      medge->flag = ME_EDGEDRAW;
     }
     BLI_edgehashIterator_free(ehi);
 
@@ -186,10 +184,10 @@ static Mesh *mesh_nurbs_displist_to_mesh(const Curve *cu, const ListBase *dispba
   }
 
   if (totvert == 0) {
-    return BKE_mesh_new_nomain(0, 0, 0, 0, 0);
+    return BKE_mesh_new_nomain(0, 0, 0, 0);
   }
 
-  Mesh *mesh = BKE_mesh_new_nomain(totvert, totedge, 0, totloop, totpoly);
+  Mesh *mesh = BKE_mesh_new_nomain(totvert, totedge, totloop, totpoly);
   MutableSpan<float3> positions = mesh->vert_positions_for_write();
   MutableSpan<MEdge> edges = mesh->edges_for_write();
   MutableSpan<MPoly> polys = mesh->polys_for_write();
@@ -223,7 +221,6 @@ static Mesh *mesh_nurbs_displist_to_mesh(const Curve *cu, const ListBase *dispba
         for (b = 1; b < dl->nr; b++) {
           edges[dst_edge].v1 = startvert + ofs + b - 1;
           edges[dst_edge].v2 = startvert + ofs + b;
-          edges[dst_edge].flag = ME_EDGEDRAW;
 
           dst_edge++;
         }
@@ -250,7 +247,6 @@ static Mesh *mesh_nurbs_displist_to_mesh(const Curve *cu, const ListBase *dispba
             else {
               edges[dst_edge].v2 = startvert + ofs + b + 1;
             }
-            edges[dst_edge].flag = ME_EDGEDRAW;
             dst_edge++;
           }
         }
@@ -359,10 +355,10 @@ static Mesh *mesh_nurbs_displist_to_mesh(const Curve *cu, const ListBase *dispba
               (*mloopuv)[1] = (v % dl->nr) / float(orco_sizeu);
 
               /* cyclic correction */
-              if ((ELEM(i, 1, 2)) && (*mloopuv)[0] == 0.0f) {
+              if (ELEM(i, 1, 2) && (*mloopuv)[0] == 0.0f) {
                 (*mloopuv)[0] = 1.0f;
               }
-              if ((ELEM(i, 0, 1)) && (*mloopuv)[1] == 0.0f) {
+              if (ELEM(i, 0, 1) && (*mloopuv)[1] == 0.0f) {
                 (*mloopuv)[1] = 1.0f;
               }
             }
@@ -662,14 +658,6 @@ void BKE_mesh_from_pointcloud(const PointCloud *pointcloud, Mesh *me)
       &pointcloud->pdata, &me->vdata, CD_MASK_PROP_ALL, CD_DUPLICATE, pointcloud->totpoint);
 }
 
-void BKE_mesh_edges_set_draw_render(Mesh *mesh)
-{
-  MutableSpan<MEdge> edges = mesh->edges_for_write();
-  for (int i = 0; i < mesh->totedge; i++) {
-    edges[i].flag |= ME_EDGEDRAW;
-  }
-}
-
 void BKE_pointcloud_to_mesh(Main *bmain, Depsgraph *depsgraph, Scene * /*scene*/, Object *ob)
 {
   BLI_assert(ob->type == OB_POINTCLOUD);
@@ -802,8 +790,7 @@ static Mesh *mesh_new_from_evaluated_curve_type_object(const Object *evaluated_o
   }
   if (const Curves *curves = get_evaluated_curves_from_object(evaluated_object)) {
     const blender::bke::AnonymousAttributePropagationInfo propagation_info;
-    return blender::bke::curve_to_wire_mesh(blender::bke::CurvesGeometry::wrap(curves->geometry),
-                                            propagation_info);
+    return blender::bke::curve_to_wire_mesh(curves->geometry.wrap(), propagation_info);
   }
   return nullptr;
 }

@@ -35,7 +35,7 @@ class FileBufferBinary : public FileBuffer {
 
   void write_vertex_end() override;
 
-  void write_face(char size, Array<uint32_t> const &vertex_indices) override;
+  void write_face(char size, Span<uint32_t> const &vertex_indices) override;
 
   void write_edge(int first, int second) override;
 };

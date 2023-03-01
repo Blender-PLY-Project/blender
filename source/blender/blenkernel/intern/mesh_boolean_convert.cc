@@ -17,9 +17,8 @@
 
 #include "BLI_alloca.h"
 #include "BLI_array.hh"
-#include "BLI_float4x4.hh"
 #include "BLI_math.h"
-#include "BLI_math_vector_types.hh"
+#include "BLI_math_matrix.hh"
 #include "BLI_mesh_boolean.hh"
 #include "BLI_mesh_intersect.hh"
 #include "BLI_span.hh"
@@ -45,7 +44,7 @@ static float4x4 clean_transform(const float4x4 &mat)
   const float fuzz = 1e-6f;
   for (int i = 0; i < 4; i++) {
     for (int j = 0; j < 4; j++) {
-      float f = mat.values[i][j];
+      float f = mat[i][j];
       if (fabsf(f) <= fuzz) {
         f = 0.0f;
       }
@@ -55,7 +54,7 @@ static float4x4 clean_transform(const float4x4 &mat)
       else if (fabsf(f + 1.0f) <= fuzz) {
         f = -1.0f;
       }
-      cleaned.values[i][j] = f;
+      cleaned[i][j] = f;
     }
   }
   return cleaned;
@@ -105,9 +104,9 @@ class MeshesToIMeshInfo {
   void input_mvert_for_orig_index(int orig_index,
                                   const Mesh **r_orig_mesh,
                                   int *r_index_in_orig_mesh) const;
-  const MEdge *input_medge_for_orig_index(int orig_index,
-                                          const Mesh **r_orig_mesh,
-                                          int *r_index_in_orig_mesh) const;
+  void input_medge_for_orig_index(int orig_index,
+                                  const Mesh **r_orig_mesh,
+                                  int *r_index_in_orig_mesh) const;
 };
 
 /* Given an index `imesh_v` in the `IMesh`, return the index of the
@@ -200,24 +199,21 @@ void MeshesToIMeshInfo::input_mvert_for_orig_index(int orig_index,
 }
 
 /* Similarly for edges. */
-const MEdge *MeshesToIMeshInfo::input_medge_for_orig_index(int orig_index,
-                                                           const Mesh **r_orig_mesh,
-                                                           int *r_index_in_orig_mesh) const
+void MeshesToIMeshInfo::input_medge_for_orig_index(int orig_index,
+                                                   const Mesh **r_orig_mesh,
+                                                   int *r_index_in_orig_mesh) const
 {
   int orig_mesh_index = input_mesh_for_imesh_edge(orig_index);
   BLI_assert(0 <= orig_mesh_index && orig_mesh_index < meshes.size());
   const Mesh *me = meshes[orig_mesh_index];
-  const Span<MEdge> edges = me->edges();
   int index_in_mesh = orig_index - mesh_edge_offset[orig_mesh_index];
   BLI_assert(0 <= index_in_mesh && index_in_mesh < me->totedge);
-  const MEdge *medge = &edges[index_in_mesh];
   if (r_orig_mesh) {
     *r_orig_mesh = me;
   }
   if (r_index_in_orig_mesh) {
     *r_index_in_orig_mesh = index_in_mesh;
   }
-  return medge;
 }
 
 /**
@@ -281,7 +277,7 @@ static IMesh meshes_to_imesh(Span<const Mesh *> meshes,
    * of the target, multiply each transform by the inverse of the
    * target matrix. Exact Boolean works better if these matrices are 'cleaned'
    *  -- see the comment for the `clean_transform` function, above. */
-  const float4x4 inv_target_mat = clean_transform(target_transform).inverted();
+  const float4x4 inv_target_mat = math::invert(clean_transform(target_transform));
 
   /* For each input `Mesh`, make `Vert`s and `Face`s for the corresponding
    * vertices and `MPoly`s, and keep track of the original indices (using the
@@ -298,7 +294,7 @@ static IMesh meshes_to_imesh(Span<const Mesh *> meshes,
     const float4x4 objn_mat = (obmats[mi] == nullptr) ? float4x4::identity() :
                                                         clean_transform(*obmats[mi]);
     r_info->to_target_transform[mi] = inv_target_mat * objn_mat;
-    r_info->has_negative_transform[mi] = objn_mat.is_negative();
+    r_info->has_negative_transform[mi] = math::is_negative(objn_mat);
 
     /* All meshes 1 and up will be transformed into the local space of operand 0.
      * Historical behavior of the modifier has been to flip the faces of any meshes
@@ -327,7 +323,7 @@ static IMesh meshes_to_imesh(Span<const Mesh *> meshes,
     else {
       threading::parallel_for(vert_positions.index_range(), 2048, [&](IndexRange range) {
         for (int i : range) {
-          float3 co = r_info->to_target_transform[mi] * vert_positions[i];
+          float3 co = math::transform_point(r_info->to_target_transform[mi], vert_positions[i]);
           mpq3 mco = mpq3(co.x, co.y, co.z);
           double3 dco(mco[0].get_d(), mco[1].get_d(), mco[2].get_d());
           verts[i] = new Vert(mco, dco, NO_INDEX, i);
@@ -435,13 +431,10 @@ static void copy_poly_attributes(Mesh *dest_mesh,
 
 /* Similar to copy_vert_attributes but for edge attributes. */
 static void copy_edge_attributes(Mesh *dest_mesh,
-                                 MEdge *medge,
-                                 const MEdge *orig_medge,
                                  const Mesh *orig_me,
                                  int medge_index,
                                  int index_in_orig_me)
 {
-  medge->flag = orig_medge->flag;
   CustomData *target_cd = &dest_mesh->edata;
   const CustomData *source_cd = &orig_me->edata;
   for (int source_layer_i = 0; source_layer_i < source_cd->totlayer; ++source_layer_i) {
@@ -565,8 +558,8 @@ static void get_poly2d_cos(const Mesh *me,
   axis_dominant_v3_to_m3(r_axis_mat, axis_dominant);
   for (const int i : poly_loops.index_range()) {
     float3 co = positions[poly_loops[i].v];
-    co = trans_mat * co;
-    mul_v2_m3v3(cos_2d[i], r_axis_mat, co);
+    co = math::transform_point(trans_mat, co);
+    *reinterpret_cast<float2 *>(&cos_2d[i]) = (float3x3(r_axis_mat) * co).xy();
   }
 }
 
@@ -714,7 +707,7 @@ static Mesh *imesh_to_mesh(IMesh *im, MeshesToIMeshInfo &mim)
   }
   /* Will calculate edges later. */
   Mesh *result = BKE_mesh_new_nomain_from_template(
-      mim.meshes[0], out_totvert, 0, 0, out_totloop, out_totpoly);
+      mim.meshes[0], out_totvert, 0, out_totloop, out_totpoly);
 
   merge_vertex_loop_poly_customdata_layers(result, mim);
   /* Set the vertex coordinate values and other data. */
@@ -778,7 +771,6 @@ static Mesh *imesh_to_mesh(IMesh *im, MeshesToIMeshInfo &mim)
 
   /* Now that the MEdges are populated, we can copy over the required attributes and custom layers.
    */
-  MutableSpan<MEdge> edges = result->edges_for_write();
   for (int fi : im->face_index_range()) {
     const Face *f = im->face(fi);
     const MPoly *mp = &dst_polys[fi];
@@ -786,11 +778,9 @@ static Mesh *imesh_to_mesh(IMesh *im, MeshesToIMeshInfo &mim)
       if (f->edge_orig[j] != NO_INDEX) {
         const Mesh *orig_me;
         int index_in_orig_me;
-        const MEdge *orig_medge = mim.input_medge_for_orig_index(
-            f->edge_orig[j], &orig_me, &index_in_orig_me);
+        mim.input_medge_for_orig_index(f->edge_orig[j], &orig_me, &index_in_orig_me);
         int e_index = dst_loops[mp->loopstart + j].e;
-        MEdge *medge = &edges[e_index];
-        copy_edge_attributes(result, medge, orig_medge, orig_me, e_index, index_in_orig_me);
+        copy_edge_attributes(result, orig_me, e_index, index_in_orig_me);
       }
     }
   }

@@ -501,6 +501,14 @@ void WM_check(bContext *C)
 
     /* Case: no open windows at all, for old file reads. */
     wm_window_ghostwindows_ensure(wm);
+
+    /* It possible for a pre-250 file to have window but none set active. See #104726. */
+    if (wm->winactive == NULL) {
+      wm->winactive = (wmWindow *)wm->windows.first;
+      if (wm->winactive != NULL) {
+        wm->winactive->active = true;
+      }
+    }
   }
 
   /* Case: file-read. */
@@ -619,7 +627,7 @@ void wm_close_and_free_all(bContext *C, ListBase *wmlist)
     BLI_remlink(wmlist, wm);
     /* Don't handle user counts as this is only ever called once #G_MAIN has already been freed via
      * #BKE_main_free so any ID's referenced by the window-manager (from ID properties) will crash.
-     * See: T100703. */
+     * See: #100703. */
     BKE_libblock_free_data(&wm->id, false);
     BKE_libblock_free_data_py(&wm->id);
     MEM_freeN(wm);

@@ -18,6 +18,7 @@
 
 #include "BLI_listbase.h"
 
+#include "BKE_fcurve.h"
 #include "BKE_idprop.h"
 #include "BKE_lib_id.h"
 #include "BKE_sound.h"
@@ -34,6 +35,7 @@
 #include "SEQ_modifier.h"
 #include "SEQ_proxy.h"
 #include "SEQ_relations.h"
+#include "SEQ_retiming.h"
 #include "SEQ_select.h"
 #include "SEQ_sequencer.h"
 #include "SEQ_sound.h"
@@ -216,6 +218,12 @@ static void seq_sequence_free_ex(Scene *scene,
   }
   if (seq->type == SEQ_TYPE_META) {
     SEQ_channels_free(&seq->channels);
+  }
+
+  if (seq->retiming_handles != NULL) {
+    MEM_freeN(seq->retiming_handles);
+    seq->retiming_handles = NULL;
+    seq->retiming_handle_num = 0;
   }
 
   MEM_freeN(seq);
@@ -562,10 +570,10 @@ static Sequence *seq_dupli(const Scene *scene_src,
 
   /* When using SEQ_DUPE_UNIQUE_NAME, it is mandatory to add new sequences in relevant container
    * (scene or meta's one), *before* checking for unique names. Otherwise the meta's list is empty
-   * and hence we miss all seqs in that meta that have already been duplicated (see T55668).
+   * and hence we miss all seqs in that meta that have already been duplicated (see #55668).
    * Note that unique name check itself could be done at a later step in calling code, once all
    * seqs have bee duplicated (that was first, simpler solution), but then handling of animation
-   * data will be broken (see T60194). */
+   * data will be broken (see #60194). */
   if (new_seq_list != NULL) {
     BLI_addtail(new_seq_list, seqn);
   }
@@ -574,6 +582,11 @@ static Sequence *seq_dupli(const Scene *scene_src,
     if (dupe_flag & SEQ_DUPE_UNIQUE_NAME) {
       SEQ_sequence_base_unique_name_recursive(scene_dst, &scene_dst->ed->seqbase, seqn);
     }
+  }
+
+  if (seq->retiming_handles != NULL) {
+    seqn->retiming_handles = MEM_dupallocN(seq->retiming_handles);
+    seqn->retiming_handle_num = seq->retiming_handle_num;
   }
 
   return seqn;
@@ -749,6 +762,12 @@ static bool seq_write_data_cb(Sequence *seq, void *userdata)
   LISTBASE_FOREACH (SeqTimelineChannel *, channel, &seq->channels) {
     BLO_write_struct(writer, SeqTimelineChannel, channel);
   }
+
+  if (seq->retiming_handles != NULL) {
+    int size = SEQ_retiming_handles_count(seq);
+    BLO_write_struct_array(writer, SeqRetimingHandle, size, seq->retiming_handles);
+  }
+
   return true;
 }
 
@@ -818,6 +837,11 @@ static bool seq_read_data_cb(Sequence *seq, void *user_data)
   SEQ_modifier_blend_read_data(reader, &seq->modifiers);
 
   BLO_read_list(reader, &seq->channels);
+
+  if (seq->retiming_handles != NULL) {
+    BLO_read_data_address(reader, &seq->retiming_handles);
+  }
+
   return true;
 }
 void SEQ_blend_read(BlendDataReader *reader, ListBase *seqbase)

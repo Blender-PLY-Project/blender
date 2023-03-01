@@ -375,15 +375,15 @@ void OVERLAY_image_empty_cache_populate(OVERLAY_Data *vedata, Object *ob)
 
   {
     /* Calling 'BKE_image_get_size' may free the texture. Get the size from 'tex' instead,
-     * see: T59347 */
+     * see: #59347 */
     int size[2] = {0};
     if (ima != nullptr) {
       ImageUser iuser = *ob->iuser;
       camera_background_images_stereo_setup(draw_ctx->scene, draw_ctx->v3d, ima, &iuser);
       tex = BKE_image_get_gpu_texture(ima, &iuser, nullptr);
       if (tex) {
-        size[0] = GPU_texture_orig_width(tex);
-        size[1] = GPU_texture_orig_height(tex);
+        size[0] = GPU_texture_original_width(tex);
+        size[1] = GPU_texture_original_height(tex);
       }
     }
     CLAMP_MIN(size[0], 1);

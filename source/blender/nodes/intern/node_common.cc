@@ -29,6 +29,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "NOD_add_node_search.hh"
 #include "NOD_common.h"
 #include "NOD_node_declaration.hh"
 #include "NOD_register.hh"
@@ -78,16 +79,14 @@ bool node_group_poll_instance(const bNode *node,
                               const bNodeTree *nodetree,
                               const char **disabled_hint)
 {
-  if (node->typeinfo->poll(node->typeinfo, nodetree, disabled_hint)) {
-    const bNodeTree *grouptree = (const bNodeTree *)node->id;
-    if (grouptree) {
-      return nodeGroupPoll(nodetree, grouptree, disabled_hint);
-    }
-
-    return true; /* without a linked node tree, group node is always ok */
+  if (!node->typeinfo->poll(node->typeinfo, nodetree, disabled_hint)) {
+    return false;
   }
-
-  return false;
+  const bNodeTree *grouptree = reinterpret_cast<const bNodeTree *>(node->id);
+  if (!grouptree) {
+    return true;
+  }
+  return nodeGroupPoll(nodetree, grouptree, disabled_hint);
 }
 
 bool nodeGroupPoll(const bNodeTree *nodetree,
@@ -114,10 +113,9 @@ bool nodeGroupPoll(const bNodeTree *nodetree,
     return false;
   }
 
-  LISTBASE_FOREACH (const bNode *, node, &grouptree->nodes) {
+  for (const bNode *node : grouptree->all_nodes()) {
     if (node->typeinfo->poll_instance &&
-        !node->typeinfo->poll_instance(
-            const_cast<bNode *>(node), const_cast<bNodeTree *>(nodetree), r_disabled_hint)) {
+        !node->typeinfo->poll_instance(node, nodetree, r_disabled_hint)) {
       return false;
     }
   }
@@ -267,6 +265,7 @@ void register_node_type_frame()
 
   node_type_base(ntype, NODE_FRAME, "Frame", NODE_CLASS_LAYOUT);
   ntype->initfunc = node_frame_init;
+  ntype->gather_add_node_search_ops = blender::nodes::search_node_add_ops_for_basic_node;
   node_type_storage(ntype, "NodeFrame", node_free_standard_storage, node_copy_standard_storage);
   node_type_size(ntype, 150, 100, 0);
   ntype->flag |= NODE_BACKGROUND;
@@ -297,6 +296,7 @@ void register_node_type_reroute()
 
   node_type_base(ntype, NODE_REROUTE, "Reroute", NODE_CLASS_LAYOUT);
   ntype->initfunc = node_reroute_init;
+  ntype->gather_add_node_search_ops = blender::nodes::search_node_add_ops_for_basic_node;
 
   nodeRegisterType(ntype);
 }

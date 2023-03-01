@@ -79,12 +79,6 @@ struct bNodeLinkDrag {
 };
 
 struct SpaceNode_Runtime {
-  /**
-   * The location of all sockets in the tree, calculated while drawing the nodes.
-   * To be indexed with #bNodeSocket::index_in_tree().
-   */
-  Vector<float2> all_socket_locations;
-
   float aspect;
 
   /** Mouse position for drawing socket-less links and adding nodes. */
@@ -308,6 +302,8 @@ void NODE_OT_detach(wmOperatorType *ot);
 void NODE_OT_link_viewer(wmOperatorType *ot);
 
 void NODE_OT_insert_offset(wmOperatorType *ot);
+
+struct wmKeyMap *node_link_modal_keymap(struct wmKeyConfig *keyconf);
 
 /* node_edit.cc */
 

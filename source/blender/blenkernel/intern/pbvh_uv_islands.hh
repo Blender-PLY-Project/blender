@@ -24,9 +24,9 @@
 
 #include "BLI_array.hh"
 #include "BLI_edgehash.h"
-#include "BLI_float3x3.hh"
 #include "BLI_map.hh"
 #include "BLI_math.h"
+#include "BLI_math_matrix_types.hh"
 #include "BLI_math_vector_types.hh"
 #include "BLI_rect.h"
 #include "BLI_vector.hh"
@@ -119,10 +119,9 @@ class TriangleToEdgeMap {
 struct MeshData {
  public:
   const Span<MLoopTri> looptris;
-  const int64_t verts_num;
   const Span<MLoop> loops;
   const Span<float2> uv_map;
-  const Span<float3> vertex_positions;
+  const Span<float3> vert_positions;
 
   VertToEdgeMap vert_to_edge_map;
 
@@ -142,9 +141,8 @@ struct MeshData {
  public:
   explicit MeshData(Span<MLoopTri> looptris,
                     Span<MLoop> loops,
-                    const int verts_num,
                     const Span<float2> uv_map,
-                    const Span<float3> vertex_positions);
+                    const Span<float3> vert_positions);
 };
 
 struct UVVertex {

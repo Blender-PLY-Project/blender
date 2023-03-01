@@ -93,8 +93,8 @@ static CLG_LogRef LOG = {"bke.fluid"};
 
 static ThreadMutex object_update_lock = BLI_MUTEX_INITIALIZER;
 
-#  define ADD_IF_LOWER_POS(a, b) (min_ff((a) + (b), max_ff((a), (b))))
-#  define ADD_IF_LOWER_NEG(a, b) (max_ff((a) + (b), min_ff((a), (b))))
+#  define ADD_IF_LOWER_POS(a, b) min_ff((a) + (b), max_ff((a), (b)))
+#  define ADD_IF_LOWER_NEG(a, b) max_ff((a) + (b), min_ff((a), (b)))
 #  define ADD_IF_LOWER(a, b) (((b) > 0) ? ADD_IF_LOWER_POS((a), (b)) : ADD_IF_LOWER_NEG((a), (b)))
 
 bool BKE_fluid_reallocate_fluid(FluidDomainSettings *fds, int res[3], int free_old)
@@ -215,7 +215,7 @@ void BKE_fluid_reallocate_copy_fluid(FluidDomainSettings *fds,
 #  if 0
           /* Note (sebbas):
            * Disabling this "skip section" as not copying borders results in weird cut-off effects.
-           * It is possible that this cutting off is the reason for line effects as seen in T74559.
+           * It is possible that this cutting off is the reason for line effects as seen in #74559.
            * Since domain borders will be handled on the simulation side anyways,
            * copying border values should not be an issue. */
 
@@ -939,7 +939,7 @@ struct ObstaclesFromDMData {
 
   const float (*vert_positions)[3];
   const MLoop *mloop;
-  const MLoopTri *mlooptri;
+  blender::Span<MLoopTri> looptris;
 
   BVHTreeFromMesh *tree;
   FluidObjectBB *bb;
@@ -974,7 +974,7 @@ static void obstacles_from_mesh_task_cb(void *__restrict userdata,
       update_velocities(data->fes,
                         data->vert_positions,
                         data->mloop,
-                        data->mlooptri,
+                        data->looptris.data(),
                         bb->velocity,
                         index,
                         data->tree,
@@ -997,7 +997,6 @@ static void obstacles_from_mesh(Object *coll_ob,
                                 float dt)
 {
   if (fes->mesh) {
-    const MLoopTri *looptri;
     BVHTreeFromMesh tree_data = {nullptr};
     int numverts, i;
 
@@ -1010,7 +1009,7 @@ static void obstacles_from_mesh(Object *coll_ob,
     int min[3], max[3], res[3];
 
     const MLoop *mloop = BKE_mesh_loops(me);
-    looptri = BKE_mesh_runtime_looptri_ensure(me);
+    const blender::Span<MLoopTri> looptris = me->looptris();
     numverts = me->totvert;
 
     /* TODO(sebbas): Make initialization of vertex velocities optional? */
@@ -1074,7 +1073,7 @@ static void obstacles_from_mesh(Object *coll_ob,
       data.fes = fes;
       data.vert_positions = positions;
       data.mloop = mloop;
-      data.mlooptri = looptri;
+      data.looptris = looptris;
       data.tree = &tree_data;
       data.bb = bb;
       data.has_velocity = has_velocity;
@@ -1484,7 +1483,7 @@ static void emit_from_particles_task_cb(void *__restrict userdata,
     for (int y = data->min[1]; y < data->max[1]; y++) {
       const int index = manta_get_index(
           x - bb->min[0], bb->res[0], y - bb->min[1], bb->res[1], z - bb->min[2]);
-      const float ray_start[3] = {(float(x)) + 0.5f, (float(y)) + 0.5f, (float(z)) + 0.5f};
+      const float ray_start[3] = {float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f};
 
       /* Find particle distance from the kdtree. */
       KDTreeNearest_3d nearest;
@@ -1983,7 +1982,7 @@ struct EmitFromDMData {
   const float (*vert_positions)[3];
   const float (*vert_normals)[3];
   const MLoop *mloop;
-  const MLoopTri *mlooptri;
+  blender::Span<MLoopTri> looptris;
   const float (*mloopuv)[2];
   const MDeformVert *dvert;
   int defgrp_index;
@@ -2008,7 +2007,7 @@ static void emit_from_mesh_task_cb(void *__restrict userdata,
     for (int y = data->min[1]; y < data->max[1]; y++) {
       const int index = manta_get_index(
           x - bb->min[0], bb->res[0], y - bb->min[1], bb->res[1], z - bb->min[2]);
-      const float ray_start[3] = {(float(x)) + 0.5f, (float(y)) + 0.5f, (float(z)) + 0.5f};
+      const float ray_start[3] = {float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f};
 
       /* Compute emission only for flow objects that produce fluid (i.e. skip outflow objects).
        * Result in bb->influence. Also computes initial velocities. Result in bb->velocity. */
@@ -2017,7 +2016,7 @@ static void emit_from_mesh_task_cb(void *__restrict userdata,
                     data->vert_positions,
                     data->vert_normals,
                     data->mloop,
-                    data->mlooptri,
+                    data->looptris.data(),
                     data->mloopuv,
                     bb->influence,
                     bb->velocity,
@@ -2067,7 +2066,7 @@ static void emit_from_mesh(
     float(*positions)[3] = BKE_mesh_vert_positions_for_write(me);
 
     const MLoop *mloop = BKE_mesh_loops(me);
-    const MLoopTri *mlooptri = BKE_mesh_runtime_looptri_ensure(me);
+    const blender::Span<MLoopTri> looptris = me->looptris();
     const int numverts = me->totvert;
     const MDeformVert *dvert = BKE_mesh_deform_verts(me);
     const float(*mloopuv)[2] = static_cast<const float(*)[2]>(
@@ -2092,8 +2091,8 @@ static void emit_from_mesh(
 
     /* Transform mesh vertices to domain grid space for fast lookups.
      * This is valid because the mesh is copied above. */
-    BKE_mesh_vertex_normals_ensure(me);
-    float(*vert_normals)[3] = BKE_mesh_vertex_normals_for_write(me);
+    BKE_mesh_vert_normals_ensure(me);
+    float(*vert_normals)[3] = BKE_mesh_vert_normals_for_write(me);
     for (i = 0; i < numverts; i++) {
       /* Vertex position. */
       mul_m4_v3(flow_ob->object_to_world, positions[i]);
@@ -2144,7 +2143,7 @@ static void emit_from_mesh(
       data.vert_positions = positions;
       data.vert_normals = vert_normals;
       data.mloop = mloop;
-      data.mlooptri = mlooptri;
+      data.looptris = looptris;
       data.mloopuv = mloopuv;
       data.dvert = dvert;
       data.defgrp_index = defgrp_index;
@@ -3248,7 +3247,7 @@ static Mesh *create_liquid_geometry(FluidDomainSettings *fds,
     return nullptr;
   }
 
-  me = BKE_mesh_new_nomain(num_verts, 0, 0, num_faces * 3, num_faces);
+  me = BKE_mesh_new_nomain(num_verts, 0, num_faces * 3, num_faces);
   if (!me) {
     return nullptr;
   }
@@ -3386,7 +3385,7 @@ static Mesh *create_smoke_geometry(FluidDomainSettings *fds, Mesh *orgmesh, Obje
     return BKE_mesh_copy_for_eval(orgmesh, false);
   }
 
-  result = BKE_mesh_new_nomain(num_verts, 0, 0, num_faces * 4, num_faces);
+  result = BKE_mesh_new_nomain(num_verts, 0, num_faces * 4, num_faces);
   float(*positions)[3] = BKE_mesh_vert_positions_for_write(result);
   mpolys = BKE_mesh_polys_for_write(result);
   mloops = BKE_mesh_loops_for_write(result);
@@ -3812,7 +3811,7 @@ static void fluid_modifier_processDomain(FluidModifierData *fmd,
 
   /* When reading data from cache (has_config == true) ensure that active fields are allocated.
    * update_flowsflags() and update_obstacleflags() will not find flow sources hidden from renders.
-   * See also: T72192. */
+   * See also: #72192. */
   if (has_config) {
     ensure_flowsfields(fds);
     ensure_obstaclefields(fds);
@@ -4169,7 +4168,7 @@ Mesh *BKE_fluid_modifier_do(
    * This does not seem particularly useful, but it's backwards compatible.
    *
    * Smoke simulation needs a texture space relative to the adaptive domain bounds, not the
-   * original mesh. So recompute it at this point in the modifier stack. See T58492. */
+   * original mesh. So recompute it at this point in the modifier stack. See #58492. */
   BKE_mesh_texspace_calc(result);
 
   return result;
@@ -4394,9 +4393,9 @@ float BKE_fluid_get_velocity_at(Object *ob, float position[3], float velocity[3]
     }
 
     /* map pos between 0.0 - 1.0 */
-    pos[0] = (pos[0] - fds->res_min[0]) / (float(fds->res[0]));
-    pos[1] = (pos[1] - fds->res_min[1]) / (float(fds->res[1]));
-    pos[2] = (pos[2] - fds->res_min[2]) / (float(fds->res[2]));
+    pos[0] = (pos[0] - fds->res_min[0]) / float(fds->res[0]);
+    pos[1] = (pos[1] - fds->res_min[1]) / float(fds->res[1]);
+    pos[2] = (pos[2] - fds->res_min[2]) / float(fds->res[2]);
 
     /* Check if position is outside active area. */
     if (fds->type == FLUID_DOMAIN_TYPE_GAS && fds->flags & FLUID_DOMAIN_USE_ADAPTIVE_DOMAIN) {

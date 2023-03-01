@@ -70,7 +70,8 @@ SymmetricSeparableBlurWeights::SymmetricSeparableBlurWeights(int type, float rad
     weights[i] /= sum;
   }
 
-  texture_ = GPU_texture_create_1d("Weights", size, 1, GPU_R16F, weights.data());
+  texture_ = GPU_texture_create_1d(
+      "Weights", size, 1, GPU_R16F, GPU_TEXTURE_USAGE_GENERAL, weights.data());
 }
 
 SymmetricSeparableBlurWeights::~SymmetricSeparableBlurWeights()
@@ -81,7 +82,7 @@ SymmetricSeparableBlurWeights::~SymmetricSeparableBlurWeights()
 void SymmetricSeparableBlurWeights::bind_as_texture(GPUShader *shader,
                                                     const char *texture_name) const
 {
-  const int texture_image_unit = GPU_shader_get_texture_binding(shader, texture_name);
+  const int texture_image_unit = GPU_shader_get_sampler_binding(shader, texture_name);
   GPU_texture_bind(texture_, texture_image_unit);
 }
 

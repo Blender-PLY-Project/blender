@@ -16,8 +16,8 @@
 #include "BKE_scene.h"
 #include "BKE_subdiv.h"
 #include "BKE_subdiv_eval.h"
-#include "BKE_subdiv_foreach.h"
-#include "BKE_subdiv_mesh.h"
+#include "BKE_subdiv_foreach.hh"
+#include "BKE_subdiv_mesh.hh"
 #include "BKE_subdiv_modifier.h"
 
 #include "BLI_linklist.h"
@@ -1220,7 +1220,7 @@ static bool draw_subdiv_build_cache(DRWSubdivCache *cache,
 
   /* To avoid floating point precision issues when evaluating patches at patch boundaries,
    * ensure that all loops sharing a vertex use the same patch coordinate. This could cause
-   * the mesh to not be watertight, leading to shadowing artifacts (see T97877). */
+   * the mesh to not be watertight, leading to shadowing artifacts (see #97877). */
   blender::Vector<int> first_loop_index(cache->num_subdiv_verts, -1);
 
   /* Save coordinates for corners, as attributes may vary for each loop connected to the same
@@ -1350,7 +1350,7 @@ static void draw_subdiv_ubo_update_and_bind(const DRWSubdivCache *cache,
 
   GPU_uniformbuf_update(cache->ubo, &storage);
 
-  const int binding = GPU_shader_get_uniform_block_binding(shader, "shader_data");
+  const int binding = GPU_shader_get_ubo_binding(shader, "shader_data");
   GPU_uniformbuf_bind(cache->ubo, binding);
 }
 
@@ -1625,7 +1625,7 @@ void draw_subdiv_accumulate_normals(const DRWSubdivCache *cache,
                                     GPUVertBuf *face_adjacency_offsets,
                                     GPUVertBuf *face_adjacency_lists,
                                     GPUVertBuf *vertex_loop_map,
-                                    GPUVertBuf *vertex_normals)
+                                    GPUVertBuf *vert_normals)
 {
   GPUShader *shader = get_subdiv_shader(SHADER_BUFFER_NORMALS_ACCUMULATE);
   GPU_shader_bind(shader);
@@ -1636,7 +1636,7 @@ void draw_subdiv_accumulate_normals(const DRWSubdivCache *cache,
   GPU_vertbuf_bind_as_ssbo(face_adjacency_offsets, binding_point++);
   GPU_vertbuf_bind_as_ssbo(face_adjacency_lists, binding_point++);
   GPU_vertbuf_bind_as_ssbo(vertex_loop_map, binding_point++);
-  GPU_vertbuf_bind_as_ssbo(vertex_normals, binding_point++);
+  GPU_vertbuf_bind_as_ssbo(vert_normals, binding_point++);
   BLI_assert(binding_point <= MAX_GPU_SUBDIV_SSBOS);
 
   drw_subdiv_compute_dispatch(cache, shader, 0, 0, cache->num_subdiv_verts);
@@ -1651,7 +1651,7 @@ void draw_subdiv_accumulate_normals(const DRWSubdivCache *cache,
 }
 
 void draw_subdiv_finalize_normals(const DRWSubdivCache *cache,
-                                  GPUVertBuf *vertex_normals,
+                                  GPUVertBuf *vert_normals,
                                   GPUVertBuf *subdiv_loop_subdiv_vert_index,
                                   GPUVertBuf *pos_nor)
 {
@@ -1659,7 +1659,7 @@ void draw_subdiv_finalize_normals(const DRWSubdivCache *cache,
   GPU_shader_bind(shader);
 
   int binding_point = 0;
-  GPU_vertbuf_bind_as_ssbo(vertex_normals, binding_point++);
+  GPU_vertbuf_bind_as_ssbo(vert_normals, binding_point++);
   GPU_vertbuf_bind_as_ssbo(subdiv_loop_subdiv_vert_index, binding_point++);
   GPU_vertbuf_bind_as_ssbo(pos_nor, binding_point++);
   BLI_assert(binding_point <= MAX_GPU_SUBDIV_SSBOS);

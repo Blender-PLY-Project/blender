@@ -213,7 +213,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
      * XXX(Hans): This probably isn't true anymore with various CoW improvements, etc. */
     if ((me_positions.data() == mesh_positions.data()) || (me_edges.data() == mesh_edges.data()) ||
         (me_polys.data() == mesh_polys.data())) {
-      /* We need to duplicate data here, otherwise we'll modify org mesh, see T51701. */
+      /* We need to duplicate data here, otherwise we'll modify org mesh, see #51701. */
       mesh = reinterpret_cast<Mesh *>(
           BKE_id_copy_ex(nullptr,
                          &mesh->id,
@@ -245,12 +245,13 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
 #  endif
       break;
     }
-    case CACHEFILE_TYPE_USD:
+    case CACHEFILE_TYPE_USD: {
 #  ifdef WITH_USD
-      result = USD_read_mesh(
-          mcmd->reader, ctx->object, mesh, time * FPS, &err_str, mcmd->read_flag);
+      const USDMeshReadParams params = create_mesh_read_params(time * FPS, mcmd->read_flag);
+      result = USD_read_mesh(mcmd->reader, ctx->object, mesh, params, &err_str);
 #  endif
       break;
+    }
     case CACHE_FILE_TYPE_INVALID:
       break;
   }

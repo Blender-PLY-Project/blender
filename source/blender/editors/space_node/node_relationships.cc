@@ -121,7 +121,11 @@ static void pick_input_link_by_link_intersect(const bContext &C,
                                               const float2 &cursor)
 {
   SpaceNode *snode = CTX_wm_space_node(&C);
-  const Span<float2> socket_locations = snode->runtime->all_socket_locations;
+  bNodeTree &node_tree = *snode->edittree;
+  const Span<float2> socket_locations = node_tree.runtime->all_socket_locations;
+  if (socket_locations.is_empty()) {
+    return;
+  }
 
   float2 drag_start;
   RNA_float_get_array(op.ptr, "drag_start", drag_start);
@@ -132,7 +136,7 @@ static void pick_input_link_by_link_intersect(const bContext &C,
   const float cursor_link_touch_distance = 12.5f * UI_DPI_FAC;
 
   bNodeLink *link_to_pick = nullptr;
-  clear_picking_highlight(&snode->edittree->links);
+  clear_picking_highlight(&node_tree.links);
   for (bNodeLink *link : socket->directly_linked_links()) {
     /* Test if the cursor is near a link. */
     std::array<float2, NODE_LINK_RESOL + 1> coords;
@@ -353,7 +357,7 @@ static void snode_autoconnect(SpaceNode &snode, const bool allow_multiple, const
 
     bNode *node_fr = sorted_nodes[i];
     bNode *node_to = sorted_nodes[i + 1];
-    /* Corner case: input/output node aligned the wrong way around (T47729). */
+    /* Corner case: input/output node aligned the wrong way around (#47729). */
     if (BLI_listbase_is_empty(&node_to->inputs) || BLI_listbase_is_empty(&node_fr->outputs)) {
       std::swap(node_fr, node_to);
     }
@@ -538,6 +542,11 @@ static bNodeSocket *determine_socket_to_view(bNode &node_to_view)
           /* This socket is linked to a deactivated viewer, the viewer should be activated. */
           return socket;
         }
+        if (socket->type == SOCK_GEOMETRY && (target_node.flag & NODE_DO_OUTPUT)) {
+          /* Skip geometry sockets connected to viewer nodes when deciding whether to cycle through
+           * outputs. */
+          continue;
+        }
         last_linked_socket_index = socket->index();
       }
     }
@@ -638,7 +647,7 @@ static int view_socket(const bContext &C,
   }
   if (viewer_node == nullptr) {
     const float2 socket_location =
-        snode.runtime->all_socket_locations[bsocket_to_view.index_in_tree()];
+        btree.runtime->all_socket_locations[bsocket_to_view.index_in_tree()];
     const int viewer_type = get_default_viewer_type(&C);
     const float2 location{socket_location.x / UI_DPI_FAC + 100, socket_location.y / UI_DPI_FAC};
     viewer_node = add_static_node(C, viewer_type, location);
@@ -841,24 +850,6 @@ static void draw_draglink_tooltip_deactivate(const ARegion &region, bNodeLinkDra
     ED_region_draw_cb_exit(region.type, nldrag.draw_handle);
     nldrag.draw_handle = nullptr;
   }
-}
-
-static void node_link_update_header(bContext *C, bNodeLinkDrag & /*nldrag*/)
-{
-  char header[UI_MAX_DRAW_STR];
-
-  const char *str_lmb = WM_key_event_string(LEFTMOUSE, true);
-  const char *str_rmb = WM_key_event_string(RIGHTMOUSE, true);
-  const char *str_alt = WM_key_event_string(EVT_LEFTALTKEY, true);
-
-  BLI_snprintf(header,
-               sizeof(header),
-               TIP_("%s: drag node link, %s: cancel, %s: swap node links"),
-               str_lmb,
-               str_rmb,
-               str_alt);
-
-  ED_workspace_status_text(C, header);
 }
 
 static int node_socket_count_links(const bNodeTree &ntree, const bNodeSocket &socket)
@@ -1085,7 +1076,12 @@ static void node_link_cancel(bContext *C, wmOperator *op)
 static void node_link_find_socket(bContext &C, wmOperator &op, const float2 &cursor)
 {
   SpaceNode &snode = *CTX_wm_space_node(&C);
+  bNodeTree &node_tree = *snode.edittree;
   bNodeLinkDrag &nldrag = *static_cast<bNodeLinkDrag *>(op.customdata);
+  const Span<float2> socket_locations = node_tree.runtime->all_socket_locations;
+  if (socket_locations.is_empty()) {
+    return;
+  }
 
   if (nldrag.in_out == SOCK_OUT) {
     if (bNodeSocket *tsock = node_find_indicated_socket(snode, cursor, SOCK_IN)) {
@@ -1116,8 +1112,7 @@ static void node_link_find_socket(bContext &C, wmOperator &op, const float2 &cur
           continue;
         }
         if (tsock && tsock->is_multi_input()) {
-          sort_multi_input_socket_links_with_drag(
-              snode.runtime->all_socket_locations, *tsock, link, cursor);
+          sort_multi_input_socket_links_with_drag(socket_locations, *tsock, link, cursor);
         }
       }
     }
@@ -1162,6 +1157,37 @@ static void node_link_find_socket(bContext &C, wmOperator &op, const float2 &cur
   }
 }
 
+enum class NodeLinkAction : int {
+  Begin,
+  Cancel,
+  Swap,
+  Confirm,
+};
+
+wmKeyMap *node_link_modal_keymap(wmKeyConfig *keyconf)
+{
+  static const EnumPropertyItem modal_items[] = {
+      {int(NodeLinkAction::Begin), "BEGIN", 0, "Drag Node-link", ""},
+      {int(NodeLinkAction::Confirm), "CONFIRM", 0, "Confirm Link", ""},
+      {int(NodeLinkAction::Cancel), "CANCEL", 0, "Cancel", ""},
+      {int(NodeLinkAction::Swap), "SWAP", 0, "Swap Links", ""},
+      {0, nullptr, 0, nullptr, nullptr},
+  };
+
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Node Link Modal Map");
+
+  /* This function is called for each space-type, only needs to add map once. */
+  if (keymap && keymap->modal_items) {
+    return nullptr;
+  }
+
+  keymap = WM_modalkeymap_ensure(keyconf, "Node Link Modal Map", modal_items);
+
+  WM_modalkeymap_assign(keymap, "NODE_OT_link");
+
+  return keymap;
+}
+
 static int node_link_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   bNodeLinkDrag &nldrag = *static_cast<bNodeLinkDrag *>(op->customdata);
@@ -1175,27 +1201,12 @@ static int node_link_modal(bContext *C, wmOperator *op, const wmEvent *event)
   nldrag.cursor[0] = event->mval[0];
   nldrag.cursor[1] = event->mval[1];
 
-  switch (event->type) {
-    case MOUSEMOVE:
-      if (nldrag.start_socket->is_multi_input() && nldrag.links.is_empty()) {
-        pick_input_link_by_link_intersect(*C, *op, nldrag, cursor);
+  if (event->type == EVT_MODAL_MAP) {
+    switch (event->val) {
+      case int(NodeLinkAction::Begin): {
+        return OPERATOR_RUNNING_MODAL;
       }
-      else {
-        node_link_find_socket(*C, *op, cursor);
-
-        node_link_update_header(C, nldrag);
-        ED_region_tag_redraw(region);
-      }
-
-      if (need_drag_link_tooltip(*snode.edittree, nldrag)) {
-        draw_draglink_tooltip_activate(*region, nldrag);
-      }
-      else {
-        draw_draglink_tooltip_deactivate(*region, nldrag);
-      }
-      break;
-    case LEFTMOUSE:
-      if (event->val == KM_RELEASE) {
+      case int(NodeLinkAction::Confirm): {
         /* Add a search menu for compatible sockets if the drag released on empty space. */
         if (should_create_drag_link_search_menu(*snode.edittree, nldrag)) {
           bNodeLink &link = nldrag.links.first();
@@ -1206,25 +1217,37 @@ static int node_link_modal(bContext *C, wmOperator *op, const wmEvent *event)
             invoke_node_link_drag_add_menu(*C, *link.tonode, *link.tosock, cursor);
           }
         }
-
         add_dragged_links_to_tree(*C, nldrag);
         return OPERATOR_FINISHED;
       }
-      break;
-    case RIGHTMOUSE:
-    case MIDDLEMOUSE: {
-      if (event->val == KM_RELEASE) {
+      case int(NodeLinkAction::Cancel): {
         node_link_cancel(C, op);
         return OPERATOR_CANCELLED;
       }
-      break;
+      case int(NodeLinkAction::Swap):
+        if (event->prev_val == KM_PRESS) {
+          nldrag.swap_links = true;
+        }
+        else if (event->prev_val == KM_RELEASE) {
+          nldrag.swap_links = false;
+        }
+        return OPERATOR_RUNNING_MODAL;
     }
-    case EVT_LEFTALTKEY:
-      nldrag.swap_links = (event->val == KM_PRESS);
-      break;
-    case EVT_ESCKEY: {
-      node_link_cancel(C, op);
-      return OPERATOR_CANCELLED;
+  }
+  else if (event->type == MOUSEMOVE) {
+    if (nldrag.start_socket->is_multi_input() && nldrag.links.is_empty()) {
+      pick_input_link_by_link_intersect(*C, *op, nldrag, cursor);
+    }
+    else {
+      node_link_find_socket(*C, *op, cursor);
+      ED_region_tag_redraw(region);
+    }
+
+    if (need_drag_link_tooltip(*snode.edittree, nldrag)) {
+      draw_draglink_tooltip_activate(*region, nldrag);
+    }
+    else {
+      draw_draglink_tooltip_deactivate(*region, nldrag);
     }
   }
 
@@ -1462,7 +1485,7 @@ static int cut_links_exec(bContext *C, wmOperator *op)
 
   bNodeTree &node_tree = *snode.edittree;
   node_tree.ensure_topology_cache();
-  const Span<float2> socket_locations = snode.runtime->all_socket_locations;
+  const Span<float2> socket_locations = node_tree.runtime->all_socket_locations;
 
   Set<bNodeLink *> links_to_remove;
   LISTBASE_FOREACH (bNodeLink *, link, &node_tree.links) {
@@ -1548,7 +1571,7 @@ static int mute_links_exec(bContext *C, wmOperator *op)
   SpaceNode &snode = *CTX_wm_space_node(C);
   const ARegion &region = *CTX_wm_region(C);
   bNodeTree &ntree = *snode.edittree;
-  const Span<float2> socket_locations = snode.runtime->all_socket_locations;
+  const Span<float2> socket_locations = ntree.runtime->all_socket_locations;
 
   Vector<float2> path;
   RNA_BEGIN (op->ptr, itemptr, "path") {
@@ -2031,7 +2054,10 @@ void node_insert_on_link_flags_set(SpaceNode &snode, const ARegion &region)
 {
   bNodeTree &node_tree = *snode.edittree;
   node_tree.ensure_topology_cache();
-  const Span<float2> socket_locations = snode.runtime->all_socket_locations;
+  const Span<float2> socket_locations = node_tree.runtime->all_socket_locations;
+  if (socket_locations.is_empty()) {
+    return;
+  }
 
   node_insert_on_link_flags_clear(node_tree);
 

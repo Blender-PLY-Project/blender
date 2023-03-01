@@ -146,7 +146,7 @@ static void waveModifier_do(WaveModifierData *md,
 
   const float(*vert_normals)[3] = nullptr;
   if ((wmd->flag & MOD_WAVE_NORM) && (mesh != nullptr)) {
-    vert_normals = BKE_mesh_vertex_normals_ensure(mesh);
+    vert_normals = BKE_mesh_vert_normals_ensure(mesh);
   }
 
   if (wmd->objectcenter != nullptr) {
@@ -329,7 +329,7 @@ static void deformVertsEM(ModifierData *md,
     mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, nullptr, verts_num, false);
   }
 
-  /* TODO(@campbellbarton): use edit-mode data only (remove this line). */
+  /* TODO(@ideasman42): use edit-mode data only (remove this line). */
   if (mesh_src != nullptr) {
     BKE_mesh_wrapper_ensure_mdata(mesh_src);
   }

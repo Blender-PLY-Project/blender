@@ -14,6 +14,8 @@ struct GPUStorageBuf;
 namespace blender {
 namespace gpu {
 
+class VertBuf;
+
 #ifdef DEBUG
 #  define DEBUG_NAME_LEN 64
 #else
@@ -48,17 +50,17 @@ class StorageBuf {
 };
 
 /* Syntactic sugar. */
-static inline GPUStorageBuf *wrap(StorageBuf *vert)
+static inline GPUStorageBuf *wrap(StorageBuf *storage_buf)
 {
-  return reinterpret_cast<GPUStorageBuf *>(vert);
+  return reinterpret_cast<GPUStorageBuf *>(storage_buf);
 }
-static inline StorageBuf *unwrap(GPUStorageBuf *vert)
+static inline StorageBuf *unwrap(GPUStorageBuf *storage_buf)
 {
-  return reinterpret_cast<StorageBuf *>(vert);
+  return reinterpret_cast<StorageBuf *>(storage_buf);
 }
-static inline const StorageBuf *unwrap(const GPUStorageBuf *vert)
+static inline const StorageBuf *unwrap(const GPUStorageBuf *storage_buf)
 {
-  return reinterpret_cast<const StorageBuf *>(vert);
+  return reinterpret_cast<const StorageBuf *>(storage_buf);
 }
 
 #undef DEBUG_NAME_LEN

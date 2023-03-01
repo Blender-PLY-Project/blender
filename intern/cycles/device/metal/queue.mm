@@ -315,6 +315,11 @@ int MetalDeviceQueue::num_sort_partition_elements() const
   return MetalInfo::optimal_sort_partition_elements(metal_device_->mtlDevice);
 }
 
+bool MetalDeviceQueue::supports_local_atomic_sort() const
+{
+  return metal_device_->use_local_atomic_sort();
+}
+
 void MetalDeviceQueue::init_execution()
 {
   /* Synchronize all textures and memory copies before executing task. */
@@ -472,11 +477,21 @@ bool MetalDeviceQueue::enqueue(DeviceKernel kernel,
   [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->texture_bindings_3d
                                             offset:0
                                            atIndex:1];
+  [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->buffer_bindings_1d
+                                            offset:0
+                                           atIndex:2];
+
   if (@available(macos 12.0, *)) {
     if (metal_device_->use_metalrt) {
       if (metal_device_->bvhMetalRT) {
         id<MTLAccelerationStructure> accel_struct = metal_device_->bvhMetalRT->accel_struct;
-        [metal_device_->mtlAncillaryArgEncoder setAccelerationStructure:accel_struct atIndex:2];
+        [metal_device_->mtlAncillaryArgEncoder setAccelerationStructure:accel_struct atIndex:3];
+        [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->blas_buffer
+                                                  offset:0
+                                                 atIndex:8];
+        [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->blas_lookup_buffer
+                                                  offset:0
+                                                 atIndex:9];
       }
 
       for (int table = 0; table < METALRT_TABLE_NUM; table++) {
@@ -486,13 +501,13 @@ bool MetalDeviceQueue::enqueue(DeviceKernel kernel,
                                                               atIndex:1];
           [metal_device_->mtlAncillaryArgEncoder
               setIntersectionFunctionTable:metal_kernel_pso->intersection_func_table[table]
-                                   atIndex:3 + table];
+                                   atIndex:4 + table];
           [mtlComputeCommandEncoder useResource:metal_kernel_pso->intersection_func_table[table]
                                           usage:MTLResourceUsageRead];
         }
         else {
           [metal_device_->mtlAncillaryArgEncoder setIntersectionFunctionTable:nil
-                                                                      atIndex:3 + table];
+                                                                      atIndex:4 + table];
         }
       }
     }
@@ -527,6 +542,10 @@ bool MetalDeviceQueue::enqueue(DeviceKernel kernel,
       if (bvhMetalRT) {
         /* Mark all Accelerations resources as used */
         [mtlComputeCommandEncoder useResource:bvhMetalRT->accel_struct usage:MTLResourceUsageRead];
+        [mtlComputeCommandEncoder useResource:metal_device_->blas_buffer
+                                        usage:MTLResourceUsageRead];
+        [mtlComputeCommandEncoder useResource:metal_device_->blas_lookup_buffer
+                                        usage:MTLResourceUsageRead];
         [mtlComputeCommandEncoder useResources:bvhMetalRT->blas_array.data()
                                          count:bvhMetalRT->blas_array.size()
                                          usage:MTLResourceUsageRead];
@@ -553,11 +572,22 @@ bool MetalDeviceQueue::enqueue(DeviceKernel kernel,
       /* See parallel_active_index.h for why this amount of shared memory is needed.
        * Rounded up to 16 bytes for Metal */
       shared_mem_bytes = (int)round_up((num_threads_per_block + 1) * sizeof(int), 16);
-      [mtlComputeCommandEncoder setThreadgroupMemoryLength:shared_mem_bytes atIndex:0];
       break;
+
+    case DEVICE_KERNEL_INTEGRATOR_SORT_BUCKET_PASS:
+    case DEVICE_KERNEL_INTEGRATOR_SORT_WRITE_PASS: {
+      int key_count = metal_device_->launch_params.data.max_shaders;
+      shared_mem_bytes = (int)round_up(key_count * sizeof(int), 16);
+      break;
+    }
 
     default:
       break;
+  }
+
+  if (shared_mem_bytes) {
+    assert(shared_mem_bytes <= 32 * 1024);
+    [mtlComputeCommandEncoder setThreadgroupMemoryLength:shared_mem_bytes atIndex:0];
   }
 
   MTLSize size_threadgroups_per_dispatch = MTLSizeMake(
@@ -848,6 +878,7 @@ void MetalDeviceQueue::prepare_resources(DeviceKernel kernel)
   /* ancillaries */
   [mtlComputeEncoder_ useResource:metal_device_->texture_bindings_2d usage:MTLResourceUsageRead];
   [mtlComputeEncoder_ useResource:metal_device_->texture_bindings_3d usage:MTLResourceUsageRead];
+  [mtlComputeEncoder_ useResource:metal_device_->buffer_bindings_1d usage:MTLResourceUsageRead];
 }
 
 id<MTLComputeCommandEncoder> MetalDeviceQueue::get_compute_encoder(DeviceKernel kernel)

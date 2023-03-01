@@ -915,7 +915,7 @@ void ED_vgroup_vert_remove(Object *ob, bDeformGroup *dg, int vertnum)
    * deform group.
    */
 
-  /* TODO(@campbellbarton): This is slow in a loop, better pass def_nr directly,
+  /* TODO(@ideasman42): This is slow in a loop, better pass def_nr directly,
    * but leave for later. */
   const ListBase *defbase = BKE_object_defgroup_list(ob);
   const int def_nr = BLI_findindex(defbase, dg);
@@ -1142,7 +1142,7 @@ static void vgroup_duplicate(Object *ob)
   BKE_object_defgroup_active_index_set(ob, BLI_listbase_count(defbase));
   icdg = BKE_object_defgroup_active_index_get(ob) - 1;
 
-  /* TODO(@campbellbarton): we might want to allow only copy selected verts here? */
+  /* TODO(@ideasman42): we might want to allow only copy selected verts here? */
   ED_vgroup_parray_alloc(static_cast<ID *>(ob->data), &dvert_array, &dvert_tot, false);
 
   if (dvert_array) {
@@ -1150,7 +1150,7 @@ static void vgroup_duplicate(Object *ob)
       MDeformVert *dv = dvert_array[i];
       dw_org = BKE_defvert_find_index(dv, idg);
       if (dw_org) {
-        /* BKE_defvert_ensure_index re-allocs org so need to store the weight first */
+        /* #BKE_defvert_ensure_index re-allocates org so need to store the weight first. */
         const float weight = dw_org->weight;
         dw_cpy = BKE_defvert_ensure_index(dv, icdg);
         dw_cpy->weight = weight;
@@ -2130,8 +2130,8 @@ static void vgroup_smooth_subset(Object *ob,
 
 static int inv_cmp_mdef_vert_weights(const void *a1, const void *a2)
 {
-  /* qsort sorts in ascending order.  We want descending order to save a memcopy
-   * so this compare function is inverted from the standard greater than comparison qsort needs.
+  /* #qsort sorts in ascending order. We want descending order to save a #memcpy
+   * so this compare function is inverted from the standard greater than comparison #qsort needs.
    * A normal compare function is called with two pointer arguments and should return an integer
    * less than, equal to, or greater than zero corresponding to whether its first argument is
    * considered less than, equal to, or greater than its second argument.
@@ -2945,7 +2945,7 @@ void OBJECT_OT_vertex_group_remove(wmOperatorType *ot)
   /* flags */
   /* redo operator will fail in this case because vertex groups aren't stored
    * in local edit mode stack and toggling "all" property will lead to
-   * all groups deleted without way to restore them (see T29527, sergey) */
+   * all groups deleted without way to restore them (see #29527, sergey) */
   ot->flag = /*OPTYPE_REGISTER|*/ OPTYPE_UNDO;
 
   /* properties */
@@ -2988,7 +2988,7 @@ void OBJECT_OT_vertex_group_assign(wmOperatorType *ot)
   /* flags */
   /* redo operator will fail in this case because vertex group assignment
    * isn't stored in local edit mode stack and toggling "new" property will
-   * lead to creating plenty of new vertex groups (see T29527, sergey) */
+   * lead to creating plenty of new vertex groups (see #29527, sergey) */
   ot->flag = /*OPTYPE_REGISTER|*/ OPTYPE_UNDO;
 }
 
@@ -3023,7 +3023,7 @@ void OBJECT_OT_vertex_group_assign_new(wmOperatorType *ot)
   /* flags */
   /* redo operator will fail in this case because vertex group assignment
    * isn't stored in local edit mode stack and toggling "new" property will
-   * lead to creating plenty of new vertex groups (see T29527, sergey) */
+   * lead to creating plenty of new vertex groups (see #29527, sergey) */
   ot->flag = /*OPTYPE_REGISTER|*/ OPTYPE_UNDO;
 }
 
@@ -3075,7 +3075,7 @@ void OBJECT_OT_vertex_group_remove_from(wmOperatorType *ot)
   /* flags */
   /* redo operator will fail in this case because vertex groups assignment
    * isn't stored in local edit mode stack and toggling "all" property will lead to
-   * removing vertices from all groups (see T29527, sergey) */
+   * removing vertices from all groups (see #29527, sergey) */
   ot->flag = /*OPTYPE_REGISTER|*/ OPTYPE_UNDO;
 
   /* properties */
@@ -3446,55 +3446,63 @@ static char *vertex_group_lock_description(bContext * /*C*/,
   int action = RNA_enum_get(params, "action");
   int mask = RNA_enum_get(params, "mask");
 
-  const char *action_str, *target_str;
-
+  /* NOTE: constructing the following string literals can be done in a less verbose way,
+   * however the resulting strings can't be usefully translated, (via `TIP_`). */
   switch (action) {
     case VGROUP_LOCK:
-      action_str = TIP_("Lock");
+      switch (mask) {
+        case VGROUP_MASK_ALL:
+          return BLI_strdup(TIP_("Lock all vertex groups of the active object"));
+        case VGROUP_MASK_SELECTED:
+          return BLI_strdup(TIP_("Lock selected vertex groups of the active object"));
+        case VGROUP_MASK_UNSELECTED:
+          return BLI_strdup(TIP_("Lock unselected vertex groups of the active object"));
+        case VGROUP_MASK_INVERT_UNSELECTED:
+          return BLI_strdup(
+              TIP_("Lock selected and unlock unselected vertex groups of the active object"));
+      }
       break;
     case VGROUP_UNLOCK:
-      action_str = TIP_("Unlock");
+      switch (mask) {
+        case VGROUP_MASK_ALL:
+          return BLI_strdup(TIP_("Unlock all vertex groups of the active object"));
+        case VGROUP_MASK_SELECTED:
+          return BLI_strdup(TIP_("Unlock selected vertex groups of the active object"));
+        case VGROUP_MASK_UNSELECTED:
+          return BLI_strdup(TIP_("Unlock unselected vertex groups of the active object"));
+        case VGROUP_MASK_INVERT_UNSELECTED:
+          return BLI_strdup(
+              TIP_("Unlock selected and lock unselected vertex groups of the active object"));
+      }
       break;
     case VGROUP_TOGGLE:
-      action_str = TIP_("Toggle locks of");
+      switch (mask) {
+        case VGROUP_MASK_ALL:
+          return BLI_strdup(TIP_("Toggle locks of all vertex groups of the active object"));
+        case VGROUP_MASK_SELECTED:
+          return BLI_strdup(TIP_("Toggle locks of selected vertex groups of the active object"));
+        case VGROUP_MASK_UNSELECTED:
+          return BLI_strdup(TIP_("Toggle locks of unselected vertex groups of the active object"));
+        case VGROUP_MASK_INVERT_UNSELECTED:
+          return BLI_strdup(TIP_(
+              "Toggle locks of all and invert unselected vertex groups of the active object"));
+      }
       break;
     case VGROUP_INVERT:
-      action_str = TIP_("Invert locks of");
-      break;
-    default:
-      return nullptr;
-  }
-
-  switch (mask) {
-    case VGROUP_MASK_ALL:
-      target_str = TIP_("all");
-      break;
-    case VGROUP_MASK_SELECTED:
-      target_str = TIP_("selected");
-      break;
-    case VGROUP_MASK_UNSELECTED:
-      target_str = TIP_("unselected");
-      break;
-    case VGROUP_MASK_INVERT_UNSELECTED:
-      switch (action) {
-        case VGROUP_INVERT:
-          target_str = TIP_("selected");
-          break;
-        case VGROUP_LOCK:
-          target_str = TIP_("selected and unlock unselected");
-          break;
-        case VGROUP_UNLOCK:
-          target_str = TIP_("selected and lock unselected");
-          break;
-        default:
-          target_str = TIP_("all and invert unselected");
+      switch (mask) {
+        case VGROUP_MASK_ALL:
+          return BLI_strdup(TIP_("Invert locks of all vertex groups of the active object"));
+        case VGROUP_MASK_SELECTED:
+        case VGROUP_MASK_INVERT_UNSELECTED:
+          return BLI_strdup(TIP_("Invert locks of selected vertex groups of the active object"));
+        case VGROUP_MASK_UNSELECTED:
+          return BLI_strdup(TIP_("Invert locks of unselected vertex groups of the active object"));
       }
       break;
     default:
       return nullptr;
   }
-
-  return BLI_sprintfN(TIP_("%s %s vertex groups of the active object"), action_str, target_str);
+  return nullptr;
 }
 
 void OBJECT_OT_vertex_group_lock(wmOperatorType *ot)

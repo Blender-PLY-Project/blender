@@ -329,7 +329,6 @@ static void calculate_cone_edges(const ConeConfig &config, MutableSpan<MEdge> ed
       MEdge &edge = edges[edge_index++];
       edge.v1 = config.first_vert;
       edge.v2 = config.first_ring_verts_start + i;
-      edge.flag = ME_EDGEDRAW;
     }
   }
 
@@ -342,7 +341,6 @@ static void calculate_cone_edges(const ConeConfig &config, MutableSpan<MEdge> ed
       MEdge &edge = edges[edge_index++];
       edge.v1 = this_ring_vert_start + j;
       edge.v2 = this_ring_vert_start + ((j + 1) % config.circle_segments);
-      edge.flag = ME_EDGEDRAW;
     }
     if (i == config.tot_edge_rings - 1) {
       /* There is one fewer ring of connecting edges. */
@@ -353,7 +351,6 @@ static void calculate_cone_edges(const ConeConfig &config, MutableSpan<MEdge> ed
       MEdge &edge = edges[edge_index++];
       edge.v1 = this_ring_vert_start + j;
       edge.v2 = next_ring_vert_start + j;
-      edge.flag = ME_EDGEDRAW;
     }
   }
 
@@ -363,7 +360,6 @@ static void calculate_cone_edges(const ConeConfig &config, MutableSpan<MEdge> ed
       MEdge &edge = edges[edge_index++];
       edge.v1 = config.last_ring_verts_start + i;
       edge.v2 = config.last_vert;
-      edge.flag = ME_EDGEDRAW;
     }
   }
 }
@@ -659,7 +655,7 @@ static void calculate_cone_uvs(const ConeConfig &config,
 static Mesh *create_vertex_mesh()
 {
   /* Returns a mesh with a single vertex at the origin. */
-  Mesh *mesh = BKE_mesh_new_nomain(1, 0, 0, 0, 0);
+  Mesh *mesh = BKE_mesh_new_nomain(1, 0, 0, 0);
   mesh->vert_positions_for_write().first() = float3(0);
   return mesh;
 }
@@ -689,7 +685,7 @@ Mesh *create_cylinder_or_cone_mesh(const float radius_top,
   }
 
   Mesh *mesh = BKE_mesh_new_nomain(
-      config.tot_verts, config.tot_edges, 0, config.tot_corners, config.tot_faces);
+      config.tot_verts, config.tot_edges, config.tot_corners, config.tot_faces);
   BKE_id_material_eval_ensure_default_slot(&mesh->id);
 
   MutableSpan<float3> positions = mesh->vert_positions_for_write();

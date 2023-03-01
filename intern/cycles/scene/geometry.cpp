@@ -13,6 +13,7 @@
 #include "scene/light.h"
 #include "scene/mesh.h"
 #include "scene/object.h"
+#include "scene/osl.h"
 #include "scene/pointcloud.h"
 #include "scene/scene.h"
 #include "scene/shader.h"
@@ -23,7 +24,9 @@
 #include "subd/patch_table.h"
 #include "subd/split.h"
 
-#include "kernel/osl/globals.h"
+#ifdef WITH_OSL
+#  include "kernel/osl/globals.h"
+#endif
 
 #include "util/foreach.h"
 #include "util/log.h"
@@ -1092,10 +1095,10 @@ void GeometryManager::device_update_mesh(Device *,
     /* normals */
     progress.set_status("Updating Mesh", "Computing normals");
 
-    packed_float3 *tri_verts = dscene->tri_verts.alloc(tri_size * 3);
+    packed_float3 *tri_verts = dscene->tri_verts.alloc(vert_size);
     uint *tri_shader = dscene->tri_shader.alloc(tri_size);
     packed_float3 *vnormal = dscene->tri_vnormal.alloc(vert_size);
-    uint4 *tri_vindex = dscene->tri_vindex.alloc(tri_size);
+    packed_uint3 *tri_vindex = dscene->tri_vindex.alloc(tri_size);
     uint *tri_patch = dscene->tri_patch.alloc(tri_size);
     float2 *tri_patch_uv = dscene->tri_patch_uv.alloc(vert_size);
 
@@ -1120,7 +1123,7 @@ void GeometryManager::device_update_mesh(Device *,
 
         if (mesh->verts_is_modified() || mesh->triangles_is_modified() ||
             mesh->vert_patch_uv_is_modified() || copy_all_data) {
-          mesh->pack_verts(&tri_verts[mesh->prim_offset * 3],
+          mesh->pack_verts(&tri_verts[mesh->vert_offset],
                            &tri_vindex[mesh->prim_offset],
                            &tri_patch[mesh->prim_offset],
                            &tri_patch_uv[mesh->vert_offset]);
@@ -1671,6 +1674,7 @@ void GeometryManager::device_update_displacement_images(Device *device,
   TaskPool pool;
   ImageManager *image_manager = scene->image_manager;
   set<int> bump_images;
+  bool has_osl_node = false;
   foreach (Geometry *geom, scene->geometry) {
     if (geom->is_modified()) {
       /* Geometry-level check for hair shadow transparency.
@@ -1690,6 +1694,9 @@ void GeometryManager::device_update_displacement_images(Device *device,
           continue;
         }
         foreach (ShaderNode *node, shader->graph->nodes) {
+          if (node->special_type == SHADER_SPECIAL_TYPE_OSL) {
+            has_osl_node = true;
+          }
           if (node->special_type != SHADER_SPECIAL_TYPE_IMAGE_SLOT) {
             continue;
           }
@@ -1705,6 +1712,15 @@ void GeometryManager::device_update_displacement_images(Device *device,
       }
     }
   }
+
+#ifdef WITH_OSL
+  /* If any OSL node is used for displacement, it may reference a texture. But it's
+   * unknown which ones, so have to load them all. */
+  if (has_osl_node) {
+    OSLShaderManager::osl_image_slots(device, image_manager, bump_images);
+  }
+#endif
+
   foreach (int slot, bump_images) {
     pool.push(function_bind(
         &ImageManager::device_update_slot, image_manager, device, scene, slot, &progress));

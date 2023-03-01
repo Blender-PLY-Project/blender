@@ -47,14 +47,16 @@ set(SRC
   transform_convert_object_texspace.c
   transform_convert_paintcurve.c
   transform_convert_particle.c
-  transform_convert_sculpt.c
+  transform_convert_sculpt.cc
   transform_convert_sequencer.c
   transform_convert_sequencer_image.c
   transform_convert_tracking.c
   transform_draw_cursors.c
   transform_generics.c
   transform_gizmo_2d.c
-  transform_gizmo_3d.c
+  transform_gizmo_3d.cc
+  transform_gizmo_3d_cage.cc
+  transform_gizmo_3d_shear.cc
   transform_gizmo_extrude_3d.c
   transform_input.c
   transform_mode.c
@@ -99,6 +101,7 @@ set(SRC
   transform_convert.h
   transform_data.h
   transform_draw_cursors.h
+  transform_gizmo.h
   transform_mode.h
   transform_orientations.h
   transform_snap.h

@@ -661,7 +661,7 @@ static bool ed_preview_draw_rect(ScrArea *area, int split, int first, rcti *rect
     rv = RE_RenderViewGetById(&rres, 0);
   }
   else {
-    /* possible the job clears the views but we're still drawing T45496 */
+    /* possible the job clears the views but we're still drawing #45496 */
     rv = nullptr;
   }
 
@@ -784,8 +784,8 @@ static Object *object_preview_camera_create(Main *preview_main,
   Object *camera = BKE_object_add(preview_main, scene, view_layer, OB_CAMERA, "Preview Camera");
 
   float rotmat[3][3];
-  float dummyscale[3];
-  mat4_to_loc_rot_size(camera->loc, rotmat, dummyscale, preview_object->object_to_world);
+  float dummy_scale[3];
+  mat4_to_loc_rot_size(camera->loc, rotmat, dummy_scale, preview_object->object_to_world);
 
   /* Camera is Y up, so needs additional rotations to obliquely face the front. */
   float drotmat[3][3];
@@ -1372,7 +1372,7 @@ static void icon_copy_rect(ImBuf *ibuf, uint w, uint h, uint *rect)
     scaledy = float(h);
   }
 
-  /* Scaling down must never assign zero width/height, see: T89868. */
+  /* Scaling down must never assign zero width/height, see: #89868. */
   ex = MAX2(1, short(scaledx));
   ey = MAX2(1, short(scaledy));
 

@@ -460,6 +460,13 @@ class StorageBuffer : public T, public detail::StorageCommon<T, 1, device_only> 
     *static_cast<T *>(this) = other;
     return *this;
   }
+
+  static void swap(StorageBuffer<T> &a, StorageBuffer<T> &b)
+  {
+    /* Swap content, but not `data_` pointers since they point to `this`. */
+    SWAP(T, static_cast<T>(a), static_cast<T>(b));
+    std::swap(a.ssbo_, b.ssbo_);
+  }
 };
 
 /** \} */
@@ -768,27 +775,27 @@ class Texture : NonCopyable {
 
   bool depth() const
   {
-    return GPU_texture_depth(tx_);
+    return GPU_texture_has_depth_format(tx_);
   }
 
   bool is_stencil() const
   {
-    return GPU_texture_stencil(tx_);
+    return GPU_texture_has_stencil_format(tx_);
   }
 
   bool is_integer() const
   {
-    return GPU_texture_integer(tx_);
+    return GPU_texture_has_integer_format(tx_);
   }
 
   bool is_cube() const
   {
-    return GPU_texture_cube(tx_);
+    return GPU_texture_is_cube(tx_);
   }
 
   bool is_array() const
   {
-    return GPU_texture_array(tx_);
+    return GPU_texture_is_array(tx_);
   }
 
   int3 size(int miplvl = 0) const
@@ -879,7 +886,7 @@ class Texture : NonCopyable {
       int3 size(0);
       GPU_texture_get_mipmap_size(tx_, 0, size);
       if (size != int3(w, h, d) || GPU_texture_format(tx_) != format ||
-          GPU_texture_cube(tx_) != cubemap || GPU_texture_array(tx_) != layered) {
+          GPU_texture_is_cube(tx_) != cubemap || GPU_texture_is_array(tx_) != layered) {
         free();
       }
     }
@@ -901,31 +908,30 @@ class Texture : NonCopyable {
                      bool cubemap)
   {
     if (h == 0) {
-      return GPU_texture_create_1d_ex(name_, w, mip_len, format, usage, data);
+      return GPU_texture_create_1d(name_, w, mip_len, format, usage, data);
     }
     else if (cubemap) {
       if (layered) {
-        return GPU_texture_create_cube_array_ex(name_, w, d, mip_len, format, usage, data);
+        return GPU_texture_create_cube_array(name_, w, d, mip_len, format, usage, data);
       }
       else {
-        return GPU_texture_create_cube_ex(name_, w, mip_len, format, usage, data);
+        return GPU_texture_create_cube(name_, w, mip_len, format, usage, data);
       }
     }
     else if (d == 0) {
       if (layered) {
-        return GPU_texture_create_1d_array_ex(name_, w, h, mip_len, format, usage, data);
+        return GPU_texture_create_1d_array(name_, w, h, mip_len, format, usage, data);
       }
       else {
-        return GPU_texture_create_2d_ex(name_, w, h, mip_len, format, usage, data);
+        return GPU_texture_create_2d(name_, w, h, mip_len, format, usage, data);
       }
     }
     else {
       if (layered) {
-        return GPU_texture_create_2d_array_ex(name_, w, h, d, mip_len, format, usage, data);
+        return GPU_texture_create_2d_array(name_, w, h, d, mip_len, format, usage, data);
       }
       else {
-        return GPU_texture_create_3d_ex(
-            name_, w, h, d, mip_len, format, GPU_DATA_FLOAT, usage, data);
+        return GPU_texture_create_3d(name_, w, h, d, mip_len, format, usage, data);
       }
     }
   }
@@ -1160,6 +1166,11 @@ template<typename T, int64_t len> class SwapChain {
         T::swap(chain_[i], chain_[i_next]);
       }
     }
+  }
+
+  constexpr int64_t size()
+  {
+    return len;
   }
 
   T &current()

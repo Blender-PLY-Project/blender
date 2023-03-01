@@ -2,6 +2,7 @@
 
 #include "BLI_kdtree.h"
 #include "BLI_rand.hh"
+#include "BLI_task.hh"
 #include "BLI_utildefines.h"
 #include "BLI_vector_set.hh"
 
@@ -285,6 +286,11 @@ static void curves_sculptmode_enter(bContext *C)
 
   ob->mode = OB_MODE_SCULPT_CURVES;
 
+  /* Setup cursor color. BKE_paint_init() could be used, but creates an additional brush. */
+  Paint *paint = BKE_paint_get_active_from_paintmode(scene, PAINT_MODE_SCULPT_CURVES);
+  copy_v3_v3_uchar(paint->paint_cursor_col, PAINT_CURSOR_SCULPT_CURVES);
+  paint->paint_cursor_col[3] = 128;
+
   ED_paint_cursor_start(&curves_sculpt->paint, CURVES_SCULPT_mode_poll_view3d);
   paint_init_pivot(ob, scene);
 
@@ -362,7 +368,7 @@ static int select_random_exec(bContext *C, wmOperator *op)
   const auto next_bool_random_value = [&]() { return rng.get_float() <= probability; };
 
   for (Curves *curves_id : unique_curves) {
-    CurvesGeometry &curves = CurvesGeometry::wrap(curves_id->geometry);
+    CurvesGeometry &curves = curves_id->geometry.wrap();
     const bool was_anything_selected = curves::has_anything_selected(curves);
 
     bke::SpanAttributeWriter<float> attribute = float_selection_ensure(*curves_id);
@@ -581,7 +587,7 @@ static int select_grow_update(bContext *C, wmOperator *op, const float mouse_dif
 
   for (std::unique_ptr<GrowOperatorDataPerCurve> &curve_op_data : op_data.per_curve) {
     Curves &curves_id = *curve_op_data->curves_id;
-    CurvesGeometry &curves = CurvesGeometry::wrap(curves_id.geometry);
+    CurvesGeometry &curves = curves_id.geometry.wrap();
     const float distance = curve_op_data->pixel_to_distance_factor * mouse_diff_x;
 
     bke::SpanAttributeWriter<float> selection = float_selection_ensure(curves_id);
@@ -629,7 +635,7 @@ static void select_grow_invoke_per_curve(const Curves &curves_id,
                                          const RegionView3D &rv3d,
                                          GrowOperatorDataPerCurve &curve_op_data)
 {
-  const CurvesGeometry &curves = CurvesGeometry::wrap(curves_id.geometry);
+  const CurvesGeometry &curves = curves_id.geometry.wrap();
   const Span<float3> positions = curves.positions();
 
   if (const bke::GAttributeReader original_selection = curves.attributes().lookup(".selection")) {
@@ -693,11 +699,11 @@ static void select_grow_invoke_per_curve(const Curves &curves_id,
             });
       });
 
-  float4x4 curves_to_world_mat = curves_ob.object_to_world;
-  float4x4 world_to_curves_mat = curves_to_world_mat.inverted();
+  float4x4 curves_to_world_mat = float4x4(curves_ob.object_to_world);
+  float4x4 world_to_curves_mat = math::invert(curves_to_world_mat);
 
   float4x4 projection;
-  ED_view3d_ob_project_mat_get(&rv3d, &curves_ob, projection.values);
+  ED_view3d_ob_project_mat_get(&rv3d, &curves_ob, projection.ptr());
 
   /* Compute how mouse movements in screen space are converted into grow/shrink distances in
    * object space. */
@@ -711,7 +717,7 @@ static void select_grow_invoke_per_curve(const Curves &curves_id,
           const float3 &pos_cu = positions[point_i];
 
           float2 pos_re;
-          ED_view3d_project_float_v2_m4(&region, pos_cu, pos_re, projection.values);
+          ED_view3d_project_float_v2_m4(&region, pos_cu, pos_re, projection.ptr());
           if (pos_re.x < 0 || pos_re.y < 0 || pos_re.x > region.winx || pos_re.y > region.winy) {
             continue;
           }
@@ -719,9 +725,12 @@ static void select_grow_invoke_per_curve(const Curves &curves_id,
            * space. */
           const float2 pos_offset_re = pos_re + float2(1, 0);
           float3 pos_offset_wo;
-          ED_view3d_win_to_3d(
-              &v3d, &region, curves_to_world_mat * pos_cu, pos_offset_re, pos_offset_wo);
-          const float3 pos_offset_cu = world_to_curves_mat * pos_offset_wo;
+          ED_view3d_win_to_3d(&v3d,
+                              &region,
+                              math::transform_point(curves_to_world_mat, pos_cu),
+                              pos_offset_re,
+                              pos_offset_wo);
+          const float3 pos_offset_cu = math::transform_point(world_to_curves_mat, pos_offset_wo);
           const float dist_cu = math::distance(pos_cu, pos_offset_cu);
           const float dist_re = math::distance(pos_re, pos_offset_re);
           const float factor = dist_cu / dist_re;
@@ -773,7 +782,7 @@ static int select_grow_modal(bContext *C, wmOperator *op, const wmEvent *event)
       /* Undo operator by resetting the selection to the original value. */
       for (std::unique_ptr<GrowOperatorDataPerCurve> &curve_op_data : op_data.per_curve) {
         Curves &curves_id = *curve_op_data->curves_id;
-        CurvesGeometry &curves = CurvesGeometry::wrap(curves_id.geometry);
+        CurvesGeometry &curves = curves_id.geometry.wrap();
         bke::MutableAttributeAccessor attributes = curves.attributes_for_write();
 
         attributes.remove(".selection");
@@ -934,7 +943,7 @@ static void min_distance_edit_draw(bContext *C, int /*x*/, int /*y*/, void *cust
 
       const float3 point_pos_cu = op_data.pos_cu + op_data.normal_cu * 0.0001f +
                                   x_iter * tangent_x_cu + y_iter * tangent_y_cu;
-      const float3 point_pos_wo = op_data.curves_to_world_mat * point_pos_cu;
+      const float3 point_pos_wo = math::transform_point(op_data.curves_to_world_mat, point_pos_cu);
       points_wo.append(point_pos_wo);
     }
   }
@@ -961,13 +970,13 @@ static void min_distance_edit_draw(bContext *C, int /*x*/, int /*y*/, void *cust
 
   const uint pos3d = GPU_vertformat_attr_add(format3d, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
   const uint col3d = GPU_vertformat_attr_add(format3d, "color", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
+  const uint siz3d = GPU_vertformat_attr_add(format3d, "size", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
 
-  immBindBuiltinProgram(GPU_SHADER_3D_POINT_FIXED_SIZE_VARYING_COLOR);
-
-  GPU_point_size(3.0f);
+  immBindBuiltinProgram(GPU_SHADER_3D_POINT_VARYING_SIZE_VARYING_COLOR);
+  GPU_program_point_size(true);
   immBegin(GPU_PRIM_POINTS, points_wo.size());
 
-  float3 brush_origin_wo = op_data.curves_to_world_mat * op_data.pos_cu;
+  float3 brush_origin_wo = math::transform_point(op_data.curves_to_world_mat, op_data.pos_cu);
   float2 brush_origin_re;
   ED_view3d_project_v2(region, brush_origin_wo, brush_origin_re);
 
@@ -982,6 +991,7 @@ static void min_distance_edit_draw(bContext *C, int /*x*/, int /*y*/, void *cust
     const float dist_to_point_re = math::distance(pos_re, brush_origin_re);
     const float alpha = 1.0f - ((dist_to_point_re - dist_to_inner_border_re) / alpha_border_re);
 
+    immAttr1f(siz3d, 3.0f);
     immAttr4f(col3d, 0.9f, 0.9f, 0.9f, alpha);
     immVertex3fv(pos3d, pos_wo);
   }
@@ -1045,8 +1055,8 @@ static int min_distance_edit_invoke(bContext *C, wmOperator *op, const wmEvent *
 
   const CurvesSurfaceTransforms transforms{curves_ob_orig, &surface_ob_orig};
 
-  const float3 ray_start_su = transforms.world_to_surface * ray_start_wo;
-  const float3 ray_end_su = transforms.world_to_surface * ray_end_wo;
+  const float3 ray_start_su = math::transform_point(transforms.world_to_surface, ray_start_wo);
+  const float3 ray_end_su = math::transform_point(transforms.world_to_surface, ray_end_wo);
   const float3 ray_direction_su = math::normalize(ray_end_su - ray_start_su);
 
   BVHTreeRayHit ray_hit;
@@ -1067,9 +1077,9 @@ static int min_distance_edit_invoke(bContext *C, wmOperator *op, const wmEvent *
   const float3 hit_pos_su = ray_hit.co;
   const float3 hit_normal_su = ray_hit.no;
 
-  const float3 hit_pos_cu = transforms.surface_to_curves * hit_pos_su;
-  const float3 hit_normal_cu = math::normalize(transforms.surface_to_curves_normal *
-                                               hit_normal_su);
+  const float3 hit_pos_cu = math::transform_point(transforms.surface_to_curves, hit_pos_su);
+  const float3 hit_normal_cu = math::normalize(
+      math::transform_direction(transforms.surface_to_curves_normal, hit_normal_su));
 
   MinDistanceEditData *op_data = MEM_new<MinDistanceEditData>(__func__);
   op_data->curves_to_world_mat = transforms.curves_to_world;

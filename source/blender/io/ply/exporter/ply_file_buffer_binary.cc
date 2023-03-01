@@ -48,13 +48,11 @@ void FileBufferBinary::write_vertex_end()
   /* In binary, there is no end to a vertex. */
 }
 
-void FileBufferBinary::write_face(char size, Array<uint32_t> const &vertex_indices)
+void FileBufferBinary::write_face(char size, Span<uint32_t> const &vertex_indices)
 {
   write_bytes(Span<char>({size}));
 
-  Span<char> dataSpan(reinterpret_cast<const char *>(vertex_indices.data()),
-                      vertex_indices.size() * sizeof(uint32_t));
-  write_bytes(dataSpan);
+  write_bytes(vertex_indices.cast<char>());
 }
 
 void FileBufferBinary::write_edge(int first, int second)
