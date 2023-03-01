@@ -162,7 +162,7 @@
  * which keeps large arrays in memory from data-blocks we may not even use.
  *
  * \note This is disabled when using compression,
- * while ZLIB supports seek it's unusably slow, see: T61880.
+ * while ZLIB supports seek it's unusably slow, see: #61880.
  */
 #define USE_BHEAD_READ_ON_DEMAND
 
@@ -320,6 +320,10 @@ static void add_main_to_main(Main *mainvar, Main *from)
   ListBase *lbarray[INDEX_ID_MAX], *fromarray[INDEX_ID_MAX];
   int a;
 
+  if (from->is_read_invalid) {
+    mainvar->is_read_invalid = true;
+  }
+
   set_listbasepointers(mainvar, lbarray);
   a = set_listbasepointers(from, fromarray);
   while (a--) {
@@ -340,6 +344,9 @@ void blo_join_main(ListBase *mainlist)
   }
 
   while ((tojoin = mainl->next)) {
+    if (tojoin->is_read_invalid) {
+      mainl->is_read_invalid = true;
+    }
     add_main_to_main(mainl, tojoin);
     BLI_remlink(mainlist, tojoin);
     BKE_main_free(tojoin);
@@ -546,6 +553,21 @@ static Main *blo_find_main(FileData *fd, const char *filepath, const char *relab
     CLOG_INFO(&LOG, 3, "Added new lib %s", filepath);
   }
   return m;
+}
+
+void blo_readfile_invalidate(FileData *fd, Main *bmain, const char *message)
+{
+  /* Tag given bmain, and 'root 'local' main one (in case given one is a library one) as invalid.
+   */
+  bmain->is_read_invalid = true;
+  for (; bmain->prev != nullptr; bmain = bmain->prev)
+    ;
+  bmain->is_read_invalid = true;
+
+  BLO_reportf_wrap(fd->reports,
+                   RPT_ERROR,
+                   "A critical error happened (the blend file is likely corrupted): %s",
+                   message);
 }
 
 /** \} */
@@ -2038,7 +2060,7 @@ static void direct_link_id_common(
 
   /* No-main and other types of special IDs should never be written in .blend files. */
   /* NOTE: `NO_MAIN` is commented for now as some code paths may still generate embedded IDs with
-   * this tag, see T103389. Related to T88555. */
+   * this tag, see #103389. Related to #88555. */
   BLI_assert(
       (id->tag & (/*LIB_TAG_NO_MAIN |*/ LIB_TAG_NO_USER_REFCOUNT | LIB_TAG_NOT_ALLOCATED)) == 0);
 
@@ -2111,7 +2133,7 @@ static void direct_link_id_common(
   /* Link direct data of overrides. */
   if (id->override_library) {
     BLO_read_data_address(reader, &id->override_library);
-    /* Work around file corruption on writing, see T86853. */
+    /* Work around file corruption on writing, see #86853. */
     if (id->override_library != nullptr) {
       BLO_read_list_cb(
           reader, &id->override_library->properties, direct_link_id_override_property_cb);
@@ -2471,7 +2493,7 @@ static void lib_link_workspace_layout_restore(IDNameLib_Map *id_map,
               sbuts->flag &= ~SB_PIN_CONTEXT;
             }
 
-            /* TODO: restore path pointers: T40046
+            /* TODO: restore path pointers: #40046
              * (complicated because this contains data pointers too, not just ID). */
             MEM_SAFE_FREE(sbuts->path);
             break;
@@ -2496,7 +2518,7 @@ static void lib_link_workspace_layout_restore(IDNameLib_Map *id_map,
             }
 
             /* force recalc of list of channels, potentially updating the active action
-             * while we're at it (as it can only be updated that way) T28962.
+             * while we're at it (as it can only be updated that way) #28962.
              */
             saction->runtime.flag |= SACTION_RUNTIME_FLAG_NEED_CHAN_SYNC;
             break;
@@ -2731,7 +2753,7 @@ void blo_lib_link_restore(Main *oldmain,
 
   /* Restore all ID pointers in Main database itself
    * (especially IDProperties might point to some word-space of other 'weirdly unchanged' ID
-   * pointers, see T69146).
+   * pointers, see #69146).
    * Note that this will re-apply again a few pointers in workspaces or so,
    * but since we are remapping final ones already set above,
    * that is just some minor harmless double-processing. */
@@ -2774,7 +2796,7 @@ static void direct_link_library(FileData *fd, Library *lib, Main *main)
          * where to add all non-library data-blocks found in file next, we have to switch that
          * 'dupli' found Main to latest position in the list!
          * Otherwise, you get weird disappearing linked data on a rather inconsistent basis.
-         * See also T53977 for reproducible case. */
+         * See also #53977 for reproducible case. */
         BLI_remlink(fd->mainlist, newmain);
         BLI_addtail(fd->mainlist, newmain);
 
@@ -2817,7 +2839,7 @@ static void fix_relpaths_library(const char *basepath, Main *main)
       /* when loading a linked lib into a file which has not been saved,
        * there is nothing we can be relative to, so instead we need to make
        * it absolute. This can happen when appending an object with a relative
-       * link into an unsaved blend file. See T27405.
+       * link into an unsaved blend file. See #27405.
        * The remap relative option will make it relative again on save - campbell */
       if (BLI_path_is_rel(lib->filepath)) {
         BLI_strncpy(lib->filepath, lib->filepath_abs, sizeof(lib->filepath));
@@ -3078,7 +3100,7 @@ static bool read_libblock_undo_restore_library(FileData *fd, Main *main, const I
    * (see BLO_read_from_memfile).
    * However, some needed by the snapshot being read may have been removed in previous one,
    * and would go missing.
-   * This leads e.g. to disappearing objects in some undo/redo case, see T34446.
+   * This leads e.g. to disappearing objects in some undo/redo case, see #34446.
    * That means we have to carefully check whether current lib or
    * libdata already exits in old main, if it does we merely copy it over into new main area,
    * otherwise we have to do a full read of that bhead... */
@@ -3564,15 +3586,33 @@ static void do_versions(FileData *fd, Library *lib, Main *main)
               main->build_hash);
   }
 
-  blo_do_versions_pre250(fd, lib, main);
-  blo_do_versions_250(fd, lib, main);
-  blo_do_versions_260(fd, lib, main);
-  blo_do_versions_270(fd, lib, main);
-  blo_do_versions_280(fd, lib, main);
-  blo_do_versions_290(fd, lib, main);
-  blo_do_versions_300(fd, lib, main);
-  blo_do_versions_400(fd, lib, main);
-  blo_do_versions_cycles(fd, lib, main);
+  if (!main->is_read_invalid) {
+    blo_do_versions_pre250(fd, lib, main);
+  }
+  if (!main->is_read_invalid) {
+    blo_do_versions_250(fd, lib, main);
+  }
+  if (!main->is_read_invalid) {
+    blo_do_versions_260(fd, lib, main);
+  }
+  if (!main->is_read_invalid) {
+    blo_do_versions_270(fd, lib, main);
+  }
+  if (!main->is_read_invalid) {
+    blo_do_versions_280(fd, lib, main);
+  }
+  if (!main->is_read_invalid) {
+    blo_do_versions_290(fd, lib, main);
+  }
+  if (!main->is_read_invalid) {
+    blo_do_versions_300(fd, lib, main);
+  }
+  if (!main->is_read_invalid) {
+    blo_do_versions_400(fd, lib, main);
+  }
+  if (!main->is_read_invalid) {
+    blo_do_versions_cycles(fd, lib, main);
+  }
 
   /* WATCH IT!!!: pointers from libdata have not been converted yet here! */
   /* WATCH IT 2!: Userdef struct init see do_versions_userdef() above! */
@@ -3582,7 +3622,7 @@ static void do_versions(FileData *fd, Library *lib, Main *main)
   main->is_locked_for_linking = false;
 }
 
-static void do_versions_after_linking(Main *main, ReportList *reports)
+static void do_versions_after_linking(FileData *fd, Main *main)
 {
   CLOG_INFO(&LOG,
             2,
@@ -3595,13 +3635,27 @@ static void do_versions_after_linking(Main *main, ReportList *reports)
   /* Don't allow versioning to create new data-blocks. */
   main->is_locked_for_linking = true;
 
-  do_versions_after_linking_250(main);
-  do_versions_after_linking_260(main);
-  do_versions_after_linking_270(main);
-  do_versions_after_linking_280(main, reports);
-  do_versions_after_linking_290(main, reports);
-  do_versions_after_linking_300(main, reports);
-  do_versions_after_linking_cycles(main);
+  if (!main->is_read_invalid) {
+    do_versions_after_linking_250(main);
+  }
+  if (!main->is_read_invalid) {
+    do_versions_after_linking_260(main);
+  }
+  if (!main->is_read_invalid) {
+    do_versions_after_linking_270(main);
+  }
+  if (!main->is_read_invalid) {
+    do_versions_after_linking_280(fd, main);
+  }
+  if (!main->is_read_invalid) {
+    do_versions_after_linking_290(fd, main);
+  }
+  if (!main->is_read_invalid) {
+    do_versions_after_linking_300(fd, main);
+  }
+  if (!main->is_read_invalid) {
+    do_versions_after_linking_cycles(main);
+  }
 
   main->is_locked_for_linking = false;
 }
@@ -3810,6 +3864,9 @@ static BHead *read_userdef(BlendFileData *bfd, FileData *fd, BHead *bhead)
 static void blo_read_file_checks(Main *bmain)
 {
 #ifndef NDEBUG
+  BLI_assert(bmain->next == nullptr);
+  BLI_assert(!bmain->is_read_invalid);
+
   LISTBASE_FOREACH (wmWindowManager *, wm, &bmain->wm) {
     LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
       /* This pointer is deprecated and should always be nullptr. */
@@ -3914,6 +3971,10 @@ BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath)
           bhead = read_libblock(fd, bfd->main, bhead, LIB_TAG_LOCAL, false, nullptr);
         }
     }
+
+    if (bfd->main->is_read_invalid) {
+      return bfd;
+    }
   }
 
   /* do before read_libraries, but skip undo case */
@@ -3925,6 +3986,10 @@ BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath)
     if ((fd->skip_flags & BLO_READ_SKIP_USERDEF) == 0) {
       do_versions_userdef(fd, bfd);
     }
+  }
+
+  if (bfd->main->is_read_invalid) {
+    return bfd;
   }
 
   if ((fd->skip_flags & BLO_READ_SKIP_DATA) == 0) {
@@ -3953,7 +4018,7 @@ BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath)
       blo_split_main(&mainlist, bfd->main);
       LISTBASE_FOREACH (Main *, mainvar, &mainlist) {
         BLI_assert(mainvar->versionfile != 0);
-        do_versions_after_linking(mainvar, fd->reports->reports);
+        do_versions_after_linking(fd, mainvar);
       }
       blo_join_main(&mainlist);
 
@@ -3961,6 +4026,10 @@ BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath)
        * does not always properly handle user counts, and/or that function does not take into
        * account old, deprecated data. */
       BKE_main_id_refcount_recompute(bfd->main, false);
+    }
+
+    if (bfd->main->is_read_invalid) {
+      return bfd;
     }
 
     /* After all data has been read and versioned, uses LIB_TAG_NEW. Theoretically this should
@@ -3982,8 +4051,8 @@ BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath)
       BKE_lib_override_library_main_update(bfd->main);
 
       /* FIXME Temporary 'fix' to a problem in how temp ID are copied in
-       * `BKE_lib_override_library_main_update`, see T103062.
-       * Proper fix involves first addressing T90610. */
+       * `BKE_lib_override_library_main_update`, see #103062.
+       * Proper fix involves first addressing #90610. */
       BKE_main_collections_parent_relations_rebuild(bfd->main);
 
       fd->reports->duration.lib_overrides = PIL_check_seconds_timer() -
@@ -4173,6 +4242,10 @@ static ID *is_yet_read(FileData *fd, Main *mainvar, BHead *bhead)
 static void expand_doit_library(void *fdhandle, Main *mainvar, void *old)
 {
   FileData *fd = static_cast<FileData *>(fdhandle);
+
+  if (mainvar->is_read_invalid) {
+    return;
+  }
 
   BHead *bhead = find_bhead(fd, old);
   if (bhead == nullptr) {
@@ -4432,7 +4505,16 @@ ID *BLO_library_link_named_part(Main *mainl,
                                 const LibraryLink_Params *params)
 {
   FileData *fd = (FileData *)(*bh);
-  return link_named_part(mainl, fd, idcode, name, params->flag);
+
+  ID *ret_id = nullptr;
+  if (!mainl->is_read_invalid) {
+    ret_id = link_named_part(mainl, fd, idcode, name, params->flag);
+  }
+
+  if (mainl->is_read_invalid) {
+    return nullptr;
+  }
+  return ret_id;
 }
 
 /* common routine to append/link something from a library */
@@ -4562,6 +4644,10 @@ static void library_link_end(Main *mainl, FileData **fd, const int flag)
   mainvar = static_cast<Main *>((*fd)->mainlist->first);
   mainl = nullptr; /* blo_join_main free's mainl, can't use anymore */
 
+  if (mainvar->is_read_invalid) {
+    return;
+  }
+
   lib_link_all(*fd, mainvar);
   after_liblink_merged_bmain_process(mainvar);
 
@@ -4582,9 +4668,13 @@ static void library_link_end(Main *mainl, FileData **fd, const int flag)
      * or they will go again through do_versions - bad, very bad! */
     split_main_newid(mainvar, main_newid);
 
-    do_versions_after_linking(main_newid, (*fd)->reports->reports);
+    do_versions_after_linking(*fd, main_newid);
 
     add_main_to_main(mainvar, main_newid);
+
+    if (mainvar->is_read_invalid) {
+      return;
+    }
   }
 
   blo_join_main((*fd)->mainlist);
@@ -4612,8 +4702,8 @@ static void library_link_end(Main *mainl, FileData **fd, const int flag)
   BKE_main_id_tag_all(mainvar, LIB_TAG_NEW, false);
 
   /* FIXME Temporary 'fix' to a problem in how temp ID are copied in
-   * `BKE_lib_override_library_main_update`, see T103062.
-   * Proper fix involves first addressing T90610. */
+   * `BKE_lib_override_library_main_update`, see #103062.
+   * Proper fix involves first addressing #90610. */
   BKE_main_collections_parent_relations_rebuild(mainvar);
 
   /* Make all relative paths, relative to the open blend file. */
@@ -4631,9 +4721,12 @@ static void library_link_end(Main *mainl, FileData **fd, const int flag)
 
 void BLO_library_link_end(Main *mainl, BlendHandle **bh, const LibraryLink_Params *params)
 {
-  FileData *fd = (FileData *)(*bh);
-  library_link_end(mainl, &fd, params->flag);
-  *bh = (BlendHandle *)fd;
+  FileData *fd = reinterpret_cast<FileData *>(*bh);
+
+  if (!mainl->is_read_invalid) {
+    library_link_end(mainl, &fd, params->flag);
+    *bh = reinterpret_cast<BlendHandle *>(fd);
+  }
 }
 
 void *BLO_library_read_struct(FileData *fd, BHead *bh, const char *blockname)

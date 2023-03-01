@@ -590,8 +590,8 @@ static int /*eContextResult*/ clip_context(const bContext *C,
 static bool clip_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
 {
   if (drag->type == WM_DRAG_PATH) {
-    /* rule might not work? */
-    if (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE, ICON_FILE_BLANK)) {
+    const eFileSel_File_Types file_type = WM_drag_get_path_file_type(drag);
+    if (ELEM(file_type, 0, FILE_TYPE_IMAGE, FILE_TYPE_MOVIE)) {
       return true;
     }
   }
@@ -604,7 +604,7 @@ static void clip_drop_copy(bContext *UNUSED(C), wmDrag *drag, wmDropBox *drop)
   PointerRNA itemptr;
   char dir[FILE_MAX], file[FILE_MAX];
 
-  BLI_split_dirfile(drag->path, dir, file, sizeof(dir), sizeof(file));
+  BLI_split_dirfile(WM_drag_get_path(drag), dir, file, sizeof(dir), sizeof(file));
 
   RNA_string_set(drop->ptr, "directory", dir);
 
@@ -897,7 +897,7 @@ static void clip_main_region_draw(const bContext *C, ARegion *region)
   /* callback */
   /* TODO(sergey): For being consistent with space image the projection needs to be configured
    * the way how the commented out code does it. This works correct for tracking data, but it
-   * causes wrong aspect correction for mask editor (see T84990). */
+   * causes wrong aspect correction for mask editor (see #84990). */
   // GPU_matrix_push_projection();
   // wmOrtho2(region->v2d.cur.xmin, region->v2d.cur.xmax, region->v2d.cur.ymin,
   //          region->v2d.cur.ymax);

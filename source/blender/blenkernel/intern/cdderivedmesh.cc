@@ -131,7 +131,7 @@ static void cdDM_recalc_looptri(DerivedMesh *dm)
   BLI_assert(cddm->dm.looptris.array == NULL);
   atomic_cas_ptr(
       (void **)&cddm->dm.looptris.array, cddm->dm.looptris.array, cddm->dm.looptris.array_wip);
-  cddm->dm.looptris.array_wip = NULL;
+  cddm->dm.looptris.array_wip = nullptr;
 }
 
 static void cdDM_free_internal(CDDerivedMesh *cddm)
@@ -222,7 +222,7 @@ static DerivedMesh *cdDM_from_mesh_ex(Mesh *mesh,
       &dm->vertData, CD_PROP_FLOAT3, "position", mesh->totvert));
   /* Though this may be an unnecessary calculation, simply retrieving the layer may return nothing
    * or dirty normals. */
-  cddm->vert_normals = BKE_mesh_vertex_normals_ensure(mesh);
+  cddm->vert_normals = BKE_mesh_vert_normals_ensure(mesh);
   cddm->medge = static_cast<MEdge *>(
       CustomData_get_layer_for_write(&dm->edgeData, CD_MEDGE, mesh->totedge));
   cddm->mloop = static_cast<MLoop *>(
@@ -232,7 +232,7 @@ static DerivedMesh *cdDM_from_mesh_ex(Mesh *mesh,
 #if 0
   cddm->mface = CustomData_get_layer(&dm->faceData, CD_MFACE);
 #else
-  cddm->mface = NULL;
+  cddm->mface = nullptr;
 #endif
 
   /* commented since even when CD_ORIGINDEX was first added this line fails

@@ -146,12 +146,12 @@ void BKE_mesh_calc_loop_tangent_single(Mesh *mesh,
 
   BKE_mesh_calc_loop_tangent_single_ex(BKE_mesh_vert_positions(mesh),
                                        mesh->totvert,
-                                       BKE_mesh_loops(mesh),
+                                       mesh->loops().data(),
                                        r_looptangents,
                                        loop_normals,
                                        reinterpret_cast<const float(*)[2]>(uv_map.data()),
                                        mesh->totloop,
-                                       BKE_mesh_polys(mesh),
+                                       mesh->polys().data(),
                                        mesh->totpoly,
                                        reports);
 }
@@ -573,20 +573,21 @@ void BKE_mesh_calc_loop_tangents(Mesh *me_eval,
                                  const char (*tangent_names)[MAX_CUSTOMDATA_LAYER_NAME],
                                  int tangent_names_len)
 {
-  /* TODO(@campbellbarton): store in Mesh.runtime to avoid recalculation. */
+  /* TODO(@ideasman42): store in Mesh.runtime to avoid recalculation. */
+  const blender::Span<MLoopTri> looptris = me_eval->looptris();
   short tangent_mask = 0;
   BKE_mesh_calc_loop_tangent_ex(
       BKE_mesh_vert_positions(me_eval),
-      BKE_mesh_polys(me_eval),
+      me_eval->polys().data(),
       uint(me_eval->totpoly),
-      BKE_mesh_loops(me_eval),
-      BKE_mesh_runtime_looptri_ensure(me_eval),
-      uint(BKE_mesh_runtime_looptri_len(me_eval)),
+      me_eval->loops().data(),
+      looptris.data(),
+      uint(looptris.size()),
       &me_eval->ldata,
       calc_active_tangent,
       tangent_names,
       tangent_names_len,
-      BKE_mesh_vertex_normals_ensure(me_eval),
+      BKE_mesh_vert_normals_ensure(me_eval),
       BKE_mesh_poly_normals_ensure(me_eval),
       static_cast<const float(*)[3]>(CustomData_get_layer(&me_eval->ldata, CD_NORMAL)),
       /* may be nullptr */

@@ -577,7 +577,7 @@ IDProperty **rna_ID_idprops(PointerRNA *ptr)
 int rna_ID_is_runtime_editable(PointerRNA *ptr, const char **r_info)
 {
   ID *id = (ID *)ptr->data;
-  /* TODO: This should be abstracted in a BKE function or define, somewhat related to T88555. */
+  /* TODO: This should be abstracted in a BKE function or define, somewhat related to #88555. */
   if (id->tag & (LIB_TAG_NO_MAIN | LIB_TAG_TEMP_MAIN | LIB_TAG_LOCALIZED |
                  LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT | LIB_TAG_COPIED_ON_WRITE)) {
     *r_info =
@@ -592,7 +592,7 @@ int rna_ID_is_runtime_editable(PointerRNA *ptr, const char **r_info)
 bool rna_ID_is_runtime_get(PointerRNA *ptr)
 {
   ID *id = (ID *)ptr->data;
-  /* TODO: This should be abstracted in a BKE function or define, somewhat related to T88555. */
+  /* TODO: This should be abstracted in a BKE function or define, somewhat related to #88555. */
   if (id->tag & (LIB_TAG_NO_MAIN | LIB_TAG_TEMP_MAIN | LIB_TAG_LOCALIZED |
                  LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT | LIB_TAG_COPIED_ON_WRITE)) {
     return true;
@@ -630,9 +630,10 @@ IDProperty **rna_PropertyGroup_idprops(PointerRNA *ptr)
   return (IDProperty **)&ptr->data;
 }
 
-void rna_PropertyGroup_unregister(Main *UNUSED(bmain), StructRNA *type)
+bool rna_PropertyGroup_unregister(Main *UNUSED(bmain), StructRNA *type)
 {
   RNA_struct_free(&BLENDER_RNA, type);
+  return true;
 }
 
 StructRNA *rna_PropertyGroup_register(Main *UNUSED(bmain),
@@ -643,13 +644,13 @@ StructRNA *rna_PropertyGroup_register(Main *UNUSED(bmain),
                                       StructCallbackFunc UNUSED(call),
                                       StructFreeFunc UNUSED(free))
 {
-  PointerRNA dummyptr;
+  PointerRNA dummy_ptr;
 
   /* create dummy pointer */
-  RNA_pointer_create(NULL, &RNA_PropertyGroup, NULL, &dummyptr);
+  RNA_pointer_create(NULL, &RNA_PropertyGroup, NULL, &dummy_ptr);
 
   /* validate the python class */
-  if (validate(&dummyptr, data, NULL) != 0) {
+  if (validate(&dummy_ptr, data, NULL) != 0) {
     return NULL;
   }
 
@@ -1488,7 +1489,6 @@ static void rna_def_ID_properties(BlenderRNA *brna)
   /* IDP_BOOLEAN */
   prop = RNA_def_property(srna, "bool", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_flag(prop, PROP_IDPROPERTY);
-  RNA_def_property_array(prop, 1);
 
   prop = RNA_def_property(srna, "bool_array", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_flag(prop, PROP_IDPROPERTY);

@@ -234,6 +234,7 @@ const uchar PAINT_CURSOR_SCULPT[3] = {255, 100, 100};
 const uchar PAINT_CURSOR_VERTEX_PAINT[3] = {255, 255, 255};
 const uchar PAINT_CURSOR_WEIGHT_PAINT[3] = {200, 200, 255};
 const uchar PAINT_CURSOR_TEXTURE_PAINT[3] = {255, 255, 255};
+const uchar PAINT_CURSOR_SCULPT_CURVES[3] = {255, 100, 100};
 
 static ePaintOverlayControlFlags overlay_flags = (ePaintOverlayControlFlags)0;
 
@@ -1424,7 +1425,7 @@ void BKE_sculptsession_bm_to_me(Object *ob, bool reorder)
     sculptsession_bm_to_me_update_data_only(ob, reorder);
 
     /* Ensure the objects evaluated mesh doesn't hold onto arrays
-     * now realloc'd in the mesh T34473. */
+     * now realloc'd in the mesh #34473. */
     DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   }
 }
@@ -1695,16 +1696,16 @@ static void sculpt_update_object(
     /* These are assigned to the base mesh in Multires. This is needed because Face Sets operators
      * and tools use the Face Sets data from the base mesh when Multires is active. */
     ss->vert_positions = BKE_mesh_vert_positions_for_write(me);
-    ss->mpoly = BKE_mesh_polys(me);
-    ss->mloop = BKE_mesh_loops(me);
+    ss->mpoly = me->polys().data();
+    ss->mloop = me->loops().data();
   }
   else {
     ss->totvert = me->totvert;
     ss->totpoly = me->totpoly;
     ss->totfaces = me->totpoly;
     ss->vert_positions = BKE_mesh_vert_positions_for_write(me);
-    ss->mpoly = BKE_mesh_polys(me);
-    ss->mloop = BKE_mesh_loops(me);
+    ss->mpoly = me->polys().data();
+    ss->mloop = me->loops().data();
     ss->multires.active = false;
     ss->multires.modifier = nullptr;
     ss->multires.level = 0;
@@ -1764,8 +1765,8 @@ static void sculpt_update_object(
   if (need_pmap && ob->type == OB_MESH && !ss->pmap) {
     BKE_mesh_vert_poly_map_create(&ss->pmap,
                                   &ss->pmap_mem,
-                                  BKE_mesh_polys(me),
-                                  BKE_mesh_loops(me),
+                                  me->polys().data(),
+                                  me->loops().data(),
                                   me->totvert,
                                   me->totpoly,
                                   me->totloop);
@@ -2266,6 +2267,8 @@ PBVH *BKE_sculpt_object_pbvh_ensure(Depsgraph *depsgraph, Object *ob)
     return pbvh;
   }
 
+  ob->sculpt->islands_valid = false;
+
   if (ob->sculpt->bm != nullptr) {
     /* Sculpting on a BMesh (dynamic-topology) gets a special PBVH. */
     pbvh = build_pbvh_for_dynamic_topology(ob);
@@ -2715,6 +2718,11 @@ static SculptAttribute *sculpt_attribute_ensure_ex(Object *ob,
 
   if (attr) {
     sculpt_attr_update(ob, attr);
+
+    /* Since "stroke_only" is not a CustomData flag we have
+     * to sync its parameter setting manually. Fixes #104618.
+     */
+    attr->params.stroke_only = params->stroke_only;
 
     return attr;
   }

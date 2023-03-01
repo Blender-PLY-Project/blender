@@ -387,7 +387,7 @@ BLI_INLINE void extract_task_range_run_iter(const MeshRenderData *mr,
   int stop;
   switch (iter_type) {
     case MR_ITER_LOOPTRI:
-      range_data.elems = is_mesh ? mr->mlooptri : (void *)mr->edit_bmesh->looptris;
+      range_data.elems = is_mesh ? mr->looptris.data() : (void *)mr->edit_bmesh->looptris;
       func = is_mesh ? extract_range_iter_looptri_mesh : extract_range_iter_looptri_bm;
       stop = mr->tri_len;
       break;
@@ -684,7 +684,7 @@ void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
   MeshRenderData *mr = mesh_render_data_create(
       object, me, is_editmode, is_paint_mode, is_mode_active, obmat, do_final, do_uvedit, ts);
   mr->use_hide = use_hide;
-  mr->use_subsurf_fdots = mr->me && mr->me->runtime->subsurf_face_dot_tags != nullptr;
+  mr->use_subsurf_fdots = mr->me && !mr->me->runtime->subsurf_face_dot_tags.is_empty();
   mr->use_final_mesh = do_final;
 
 #ifdef DEBUG_TIME

@@ -42,7 +42,8 @@
 #include "SEQ_time.h"
 #include "SEQ_transform.h"
 
-#include "transform.h" /* own include */
+#include "transform.h"
+#include "transform_gizmo.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Shared Callback's
@@ -210,8 +211,8 @@ static GizmoGroup2D *gizmogroup2d_init(wmGizmoGroup *gzgroup)
 
   RNA_enum_set(ggd->cage->ptr,
                "transform",
-               ED_GIZMO_CAGE2D_XFORM_FLAG_TRANSLATE | ED_GIZMO_CAGE2D_XFORM_FLAG_SCALE |
-                   ED_GIZMO_CAGE2D_XFORM_FLAG_ROTATE);
+               ED_GIZMO_CAGE_XFORM_FLAG_TRANSLATE | ED_GIZMO_CAGE_XFORM_FLAG_SCALE |
+                   ED_GIZMO_CAGE_XFORM_FLAG_ROTATE);
 
   return ggd;
 }

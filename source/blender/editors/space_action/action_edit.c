@@ -315,16 +315,16 @@ static bool actkeys_channels_get_selected_extents(bAnimContext *ac, float *r_min
   ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 
   /* loop through all channels, finding the first one that's selected */
-  float ymax = ACHANNEL_FIRST_TOP(ac);
-
-  for (ale = anim_data.first; ale; ale = ale->next, ymax -= ACHANNEL_STEP(ac)) {
+  float ymax = ANIM_UI_get_first_channel_top(&ac->region->v2d);
+  const float channel_step = ANIM_UI_get_channel_step();
+  for (ale = anim_data.first; ale; ale = ale->next, ymax -= channel_step) {
     const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
 
     /* must be selected... */
     if (acf && acf->has_setting(ac, ale, ACHANNEL_SETTING_SELECT) &&
         ANIM_channel_setting_get(ac, ale, ACHANNEL_SETTING_SELECT)) {
       /* update best estimate */
-      *r_min = ymax - ACHANNEL_HEIGHT(ac);
+      *r_min = ymax - ANIM_UI_get_channel_height();
       *r_max = ymax;
 
       /* is this high enough priority yet? */
@@ -524,7 +524,7 @@ static eKeyPasteError paste_action_keys(bAnimContext *ac,
    * - First time we try to filter more strictly, allowing only selected channels
    *   to allow copying animation between channels
    * - Second time, we loosen things up if nothing was found the first time, allowing
-   *   users to just paste keyframes back into the original curve again T31670.
+   *   users to just paste keyframes back into the original curve again #31670.
    */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT |
             ANIMFILTER_FCURVESONLY | ANIMFILTER_NODUPLIS);
@@ -533,8 +533,9 @@ static eKeyPasteError paste_action_keys(bAnimContext *ac,
     ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
   }
 
-  /* paste keyframes */
-  const eKeyPasteError ok = paste_animedit_keys(ac, &anim_data, offset_mode, merge_mode, flip);
+  /* Value offset is always None because the user cannot see the effect of it. */
+  const eKeyPasteError ok = paste_animedit_keys(
+      ac, &anim_data, offset_mode, KEYFRAME_PASTE_VALUE_OFFSET_NONE, merge_mode, flip);
 
   /* clean up */
   ANIM_animdata_freelist(&anim_data);

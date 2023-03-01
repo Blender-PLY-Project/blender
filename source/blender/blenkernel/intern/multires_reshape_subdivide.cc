@@ -24,18 +24,17 @@
 
 #include "DEG_depsgraph_query.h"
 
-#include "multires_reshape.h"
+#include "multires_reshape.hh"
 
 static void multires_subdivide_create_object_space_linear_grids(Mesh *mesh)
 {
   const float(*positions)[3] = BKE_mesh_vert_positions(mesh);
-  const MPoly *polys = BKE_mesh_polys(mesh);
-  const MLoop *loops = BKE_mesh_loops(mesh);
+  const blender::Span<MPoly> polys = mesh->polys();
+  const blender::Span<MLoop> loops = mesh->loops();
 
   MDisps *mdisps = static_cast<MDisps *>(
       CustomData_get_layer_for_write(&mesh->ldata, CD_MDISPS, mesh->totloop));
-  const int totpoly = mesh->totpoly;
-  for (int p = 0; p < totpoly; p++) {
+  for (const int p : polys.index_range()) {
     const MPoly *poly = &polys[p];
     float poly_center[3];
     BKE_mesh_calc_poly_center(poly, &loops[poly->loopstart], positions, poly_center);

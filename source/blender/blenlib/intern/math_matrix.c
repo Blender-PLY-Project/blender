@@ -257,7 +257,7 @@ void shuffle_m4(float R[4][4], const int index[4])
 
 void mul_m4_m4m4(float R[4][4], const float A[4][4], const float B[4][4])
 {
-  if (R == A || R == B) {
+  if (ELEM(R, A, B)) {
     float T[4][4];
     mul_m4_m4m4(T, A, B);
     copy_m4_m4(R, T);
@@ -359,7 +359,7 @@ void mul_m3_m3_post(float R[3][3], const float B[3][3])
 
 void mul_m3_m3m3(float R[3][3], const float A[3][3], const float B[3][3])
 {
-  if (R == A || R == B) {
+  if (ELEM(R, A, B)) {
     float T[3][3];
     mul_m3_m3m3(T, A, B);
     copy_m3_m3(R, T);
@@ -504,8 +504,9 @@ void _va_mul_m3_series_4(float r[3][3],
                          const float m2[3][3],
                          const float m3[3][3])
 {
-  mul_m3_m3m3(r, m1, m2);
-  mul_m3_m3m3(r, r, m3);
+  float s[3][3];
+  mul_m3_m3m3(s, m1, m2);
+  mul_m3_m3m3(r, s, m3);
 }
 void _va_mul_m3_series_5(float r[3][3],
                          const float m1[3][3],
@@ -513,9 +514,11 @@ void _va_mul_m3_series_5(float r[3][3],
                          const float m3[3][3],
                          const float m4[3][3])
 {
-  mul_m3_m3m3(r, m1, m2);
-  mul_m3_m3m3(r, r, m3);
-  mul_m3_m3m3(r, r, m4);
+  float s[3][3];
+  float t[3][3];
+  mul_m3_m3m3(s, m1, m2);
+  mul_m3_m3m3(t, s, m3);
+  mul_m3_m3m3(r, t, m4);
 }
 void _va_mul_m3_series_6(float r[3][3],
                          const float m1[3][3],
@@ -524,10 +527,12 @@ void _va_mul_m3_series_6(float r[3][3],
                          const float m4[3][3],
                          const float m5[3][3])
 {
-  mul_m3_m3m3(r, m1, m2);
-  mul_m3_m3m3(r, r, m3);
-  mul_m3_m3m3(r, r, m4);
-  mul_m3_m3m3(r, r, m5);
+  float s[3][3];
+  float t[3][3];
+  mul_m3_m3m3(s, m1, m2);
+  mul_m3_m3m3(t, s, m3);
+  mul_m3_m3m3(s, t, m4);
+  mul_m3_m3m3(r, s, m5);
 }
 void _va_mul_m3_series_7(float r[3][3],
                          const float m1[3][3],
@@ -537,11 +542,13 @@ void _va_mul_m3_series_7(float r[3][3],
                          const float m5[3][3],
                          const float m6[3][3])
 {
-  mul_m3_m3m3(r, m1, m2);
-  mul_m3_m3m3(r, r, m3);
-  mul_m3_m3m3(r, r, m4);
-  mul_m3_m3m3(r, r, m5);
-  mul_m3_m3m3(r, r, m6);
+  float s[3][3];
+  float t[3][3];
+  mul_m3_m3m3(s, m1, m2);
+  mul_m3_m3m3(t, s, m3);
+  mul_m3_m3m3(s, t, m4);
+  mul_m3_m3m3(t, s, m5);
+  mul_m3_m3m3(r, t, m6);
 }
 void _va_mul_m3_series_8(float r[3][3],
                          const float m1[3][3],
@@ -552,12 +559,14 @@ void _va_mul_m3_series_8(float r[3][3],
                          const float m6[3][3],
                          const float m7[3][3])
 {
-  mul_m3_m3m3(r, m1, m2);
-  mul_m3_m3m3(r, r, m3);
-  mul_m3_m3m3(r, r, m4);
-  mul_m3_m3m3(r, r, m5);
-  mul_m3_m3m3(r, r, m6);
-  mul_m3_m3m3(r, r, m7);
+  float s[3][3];
+  float t[3][3];
+  mul_m3_m3m3(s, m1, m2);
+  mul_m3_m3m3(t, s, m3);
+  mul_m3_m3m3(s, t, m4);
+  mul_m3_m3m3(t, s, m5);
+  mul_m3_m3m3(s, t, m6);
+  mul_m3_m3m3(r, s, m7);
 }
 void _va_mul_m3_series_9(float r[3][3],
                          const float m1[3][3],
@@ -569,13 +578,15 @@ void _va_mul_m3_series_9(float r[3][3],
                          const float m7[3][3],
                          const float m8[3][3])
 {
-  mul_m3_m3m3(r, m1, m2);
-  mul_m3_m3m3(r, r, m3);
-  mul_m3_m3m3(r, r, m4);
-  mul_m3_m3m3(r, r, m5);
-  mul_m3_m3m3(r, r, m6);
-  mul_m3_m3m3(r, r, m7);
-  mul_m3_m3m3(r, r, m8);
+  float s[3][3];
+  float t[3][3];
+  mul_m3_m3m3(s, m1, m2);
+  mul_m3_m3m3(t, s, m3);
+  mul_m3_m3m3(s, t, m4);
+  mul_m3_m3m3(t, s, m5);
+  mul_m3_m3m3(s, t, m6);
+  mul_m3_m3m3(t, s, m7);
+  mul_m3_m3m3(r, t, m8);
 }
 
 /** \} */
@@ -593,8 +604,9 @@ void _va_mul_m4_series_4(float r[4][4],
                          const float m2[4][4],
                          const float m3[4][4])
 {
-  mul_m4_m4m4(r, m1, m2);
-  mul_m4_m4m4(r, r, m3);
+  float s[4][4];
+  mul_m4_m4m4(s, m1, m2);
+  mul_m4_m4m4(r, s, m3);
 }
 void _va_mul_m4_series_5(float r[4][4],
                          const float m1[4][4],
@@ -602,9 +614,11 @@ void _va_mul_m4_series_5(float r[4][4],
                          const float m3[4][4],
                          const float m4[4][4])
 {
-  mul_m4_m4m4(r, m1, m2);
-  mul_m4_m4m4(r, r, m3);
-  mul_m4_m4m4(r, r, m4);
+  float s[4][4];
+  float t[4][4];
+  mul_m4_m4m4(s, m1, m2);
+  mul_m4_m4m4(t, s, m3);
+  mul_m4_m4m4(r, t, m4);
 }
 void _va_mul_m4_series_6(float r[4][4],
                          const float m1[4][4],
@@ -613,10 +627,12 @@ void _va_mul_m4_series_6(float r[4][4],
                          const float m4[4][4],
                          const float m5[4][4])
 {
-  mul_m4_m4m4(r, m1, m2);
-  mul_m4_m4m4(r, r, m3);
-  mul_m4_m4m4(r, r, m4);
-  mul_m4_m4m4(r, r, m5);
+  float s[4][4];
+  float t[4][4];
+  mul_m4_m4m4(s, m1, m2);
+  mul_m4_m4m4(t, s, m3);
+  mul_m4_m4m4(s, t, m4);
+  mul_m4_m4m4(r, s, m5);
 }
 void _va_mul_m4_series_7(float r[4][4],
                          const float m1[4][4],
@@ -626,11 +642,13 @@ void _va_mul_m4_series_7(float r[4][4],
                          const float m5[4][4],
                          const float m6[4][4])
 {
-  mul_m4_m4m4(r, m1, m2);
-  mul_m4_m4m4(r, r, m3);
-  mul_m4_m4m4(r, r, m4);
-  mul_m4_m4m4(r, r, m5);
-  mul_m4_m4m4(r, r, m6);
+  float s[4][4];
+  float t[4][4];
+  mul_m4_m4m4(s, m1, m2);
+  mul_m4_m4m4(t, s, m3);
+  mul_m4_m4m4(s, t, m4);
+  mul_m4_m4m4(t, s, m5);
+  mul_m4_m4m4(r, t, m6);
 }
 void _va_mul_m4_series_8(float r[4][4],
                          const float m1[4][4],
@@ -641,12 +659,14 @@ void _va_mul_m4_series_8(float r[4][4],
                          const float m6[4][4],
                          const float m7[4][4])
 {
-  mul_m4_m4m4(r, m1, m2);
-  mul_m4_m4m4(r, r, m3);
-  mul_m4_m4m4(r, r, m4);
-  mul_m4_m4m4(r, r, m5);
-  mul_m4_m4m4(r, r, m6);
-  mul_m4_m4m4(r, r, m7);
+  float s[4][4];
+  float t[4][4];
+  mul_m4_m4m4(s, m1, m2);
+  mul_m4_m4m4(t, s, m3);
+  mul_m4_m4m4(s, t, m4);
+  mul_m4_m4m4(t, s, m5);
+  mul_m4_m4m4(s, t, m6);
+  mul_m4_m4m4(r, s, m7);
 }
 void _va_mul_m4_series_9(float r[4][4],
                          const float m1[4][4],
@@ -658,13 +678,15 @@ void _va_mul_m4_series_9(float r[4][4],
                          const float m7[4][4],
                          const float m8[4][4])
 {
-  mul_m4_m4m4(r, m1, m2);
-  mul_m4_m4m4(r, r, m3);
-  mul_m4_m4m4(r, r, m4);
-  mul_m4_m4m4(r, r, m5);
-  mul_m4_m4m4(r, r, m6);
-  mul_m4_m4m4(r, r, m7);
-  mul_m4_m4m4(r, r, m8);
+  float s[4][4];
+  float t[4][4];
+  mul_m4_m4m4(s, m1, m2);
+  mul_m4_m4m4(t, s, m3);
+  mul_m4_m4m4(s, t, m4);
+  mul_m4_m4m4(t, s, m5);
+  mul_m4_m4m4(s, t, m6);
+  mul_m4_m4m4(t, s, m7);
+  mul_m4_m4m4(r, t, m8);
 }
 
 /** \} */
@@ -1663,7 +1685,7 @@ void orthogonalize_m4_stable(float R[4][4], int axis, bool normalize)
  *
  * \note If an object has a zero scaled axis, this function can be used to "clean" the matrix
  * to behave as if the scale on that axis was `unit_length`. So it can be inverted
- * or used in matrix multiply without creating degenerate matrices, see: T50103
+ * or used in matrix multiply without creating degenerate matrices, see: #50103
  * \{ */
 
 /**
@@ -2412,7 +2434,7 @@ void interp_m3_m3m3(float R[3][3], const float A[3][3], const float B[3][3], con
 
   /* Quaternions cannot represent an axis flip. If such a singularity is detected, choose a
    * different decomposition of the matrix that still satisfies A = U_A * P_A but which has a
-   * positive determinant and thus no axis flips. This resolves T77154.
+   * positive determinant and thus no axis flips. This resolves #77154.
    *
    * Note that a flip of two axes is just a rotation of 180 degrees around the third axis, and
    * three flipped axes are just an 180 degree rotation + a single axis flip. It is thus sufficient

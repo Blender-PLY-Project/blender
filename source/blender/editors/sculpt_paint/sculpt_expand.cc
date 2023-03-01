@@ -44,7 +44,7 @@
 #include "ED_screen.h"
 #include "ED_sculpt.h"
 #include "paint_intern.h"
-#include "sculpt_intern.h"
+#include "sculpt_intern.hh"
 
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
@@ -517,11 +517,12 @@ static bool mask_expand_normal_floodfill_cb(
 static float *sculpt_expand_normal_falloff_create(Sculpt *sd,
                                                   Object *ob,
                                                   const PBVHVertRef v,
-                                                  const float edge_sensitivity)
+                                                  const float edge_sensitivity,
+                                                  const int blur_steps)
 {
   SculptSession *ss = ob->sculpt;
   const int totvert = SCULPT_vertex_count_get(ss);
-  float *dists = static_cast<float *>(MEM_malloc_arrayN(totvert, sizeof(float), __func__));
+  float *dists = static_cast<float *>(MEM_calloc_arrayN(totvert, sizeof(float), __func__));
   float *edge_factor = static_cast<float *>(MEM_callocN(sizeof(float) * totvert, __func__));
   for (int i = 0; i < totvert; i++) {
     edge_factor[i] = 1.0f;
@@ -540,7 +541,7 @@ static float *sculpt_expand_normal_falloff_create(Sculpt *sd,
   SCULPT_floodfill_execute(ss, &flood, mask_expand_normal_floodfill_cb, &fdata);
   SCULPT_floodfill_free(&flood);
 
-  for (int repeat = 0; repeat < 2; repeat++) {
+  for (int repeat = 0; repeat < blur_steps; repeat++) {
     for (int i = 0; i < totvert; i++) {
       PBVHVertRef vertex = BKE_pbvh_index_to_vertex(ss->pbvh, i);
 
@@ -550,8 +551,15 @@ static float *sculpt_expand_normal_falloff_create(Sculpt *sd,
         avg += dists[ni.index];
       }
       SCULPT_VERTEX_NEIGHBORS_ITER_END(ni);
-      dists[i] = avg / ni.size;
+
+      if (ni.size > 0.0f) {
+        dists[i] = avg / ni.size;
+      }
     }
+  }
+
+  for (int i = 0; i < totvert; i++) {
+    dists[i] = 1.0 - dists[i];
   }
 
   MEM_SAFE_FREE(edge_factor);
@@ -783,10 +791,10 @@ static void sculpt_expand_grids_to_faces_falloff(SculptSession *ss,
                                                  Mesh *mesh,
                                                  ExpandCache *expand_cache)
 {
-  const MPoly *polys = BKE_mesh_polys(mesh);
+  const blender::Span<MPoly> polys = mesh->polys();
   const CCGKey *key = BKE_pbvh_get_grid_key(ss->pbvh);
 
-  for (int p = 0; p < mesh->totpoly; p++) {
+  for (const int p : polys.index_range()) {
     const MPoly *poly = &polys[p];
     float accum = 0.0f;
     for (int l = 0; l < poly->totloop; l++) {
@@ -801,10 +809,10 @@ static void sculpt_expand_grids_to_faces_falloff(SculptSession *ss,
 
 static void sculpt_expand_vertex_to_faces_falloff(Mesh *mesh, ExpandCache *expand_cache)
 {
-  const MPoly *polys = BKE_mesh_polys(mesh);
-  const MLoop *loops = BKE_mesh_loops(mesh);
+  const blender::Span<MPoly> polys = mesh->polys();
+  const blender::Span<MLoop> loops = mesh->loops();
 
-  for (int p = 0; p < mesh->totpoly; p++) {
+  for (const int p : polys.index_range()) {
     const MPoly *poly = &polys[p];
     float accum = 0.0f;
     for (int l = 0; l < poly->totloop; l++) {
@@ -1049,7 +1057,11 @@ static void sculpt_expand_falloff_factors_from_vertex_and_symm_create(
       break;
     case SCULPT_EXPAND_FALLOFF_NORMALS:
       expand_cache->vert_falloff = sculpt_expand_normal_falloff_create(
-          sd, ob, v, SCULPT_EXPAND_NORMALS_FALLOFF_EDGE_SENSITIVITY);
+          sd,
+          ob,
+          v,
+          SCULPT_EXPAND_NORMALS_FALLOFF_EDGE_SENSITIVITY,
+          expand_cache->normal_falloff_blur_steps);
       break;
     case SCULPT_EXPAND_FALLOFF_SPHERICAL:
       expand_cache->vert_falloff = sculpt_expand_spherical_falloff_create(ob, v);
@@ -1975,8 +1987,8 @@ static void sculpt_expand_delete_face_set_id(int *r_face_sets,
 {
   const int totface = ss->totfaces;
   MeshElemMap *pmap = ss->pmap;
-  const MPoly *polys = BKE_mesh_polys(mesh);
-  const MLoop *loops = BKE_mesh_loops(mesh);
+  const blender::Span<MPoly> polys = mesh->polys();
+  const blender::Span<MLoop> loops = mesh->loops();
 
   /* Check that all the face sets IDs in the mesh are not equal to `delete_id`
    * before attempting to delete it. */
@@ -2066,6 +2078,7 @@ static void sculpt_expand_cache_initial_config_set(bContext *C,
                                                    ExpandCache *expand_cache)
 {
   /* RNA properties. */
+  expand_cache->normal_falloff_blur_steps = RNA_int_get(op->ptr, "normal_falloff_smooth");
   expand_cache->invert = RNA_boolean_get(op->ptr, "invert");
   expand_cache->preserve = RNA_boolean_get(op->ptr, "use_mask_preserve");
   expand_cache->auto_mask = RNA_boolean_get(op->ptr, "use_auto_mask");
@@ -2415,4 +2428,13 @@ void SCULPT_OT_expand(wmOperatorType *ot)
                              false,
                              "Auto Create",
                              "Fill in mask if nothing is already masked");
+  ot->prop = RNA_def_int(ot->srna,
+                         "normal_falloff_smooth",
+                         2,
+                         0,
+                         10,
+                         "Normal Smooth",
+                         "Blurring steps for normal falloff",
+                         0,
+                         10);
 }

@@ -37,11 +37,10 @@ static Mesh *hull_from_bullet(const Mesh *mesh, Span<float3> coords)
   /* Create Mesh *result with proper capacity. */
   Mesh *result;
   if (mesh) {
-    result = BKE_mesh_new_nomain_from_template(
-        mesh, verts_num, edges_num, 0, loops_num, faces_num);
+    result = BKE_mesh_new_nomain_from_template(mesh, verts_num, edges_num, loops_num, faces_num);
   }
   else {
-    result = BKE_mesh_new_nomain(verts_num, edges_num, 0, loops_num, faces_num);
+    result = BKE_mesh_new_nomain(verts_num, edges_num, loops_num, faces_num);
     BKE_id_material_eval_ensure_default_slot(&result->id);
   }
 
@@ -84,7 +83,6 @@ static Mesh *hull_from_bullet(const Mesh *mesh, Span<float3> coords)
       MEdge &edge = edges[edge_index];
       edge.v1 = v_from;
       edge.v2 = v_to;
-      edge.flag = ME_EDGEDRAW;
 
       /* Write edge index into both loops that have it. */
       int reverse_index = plConvexHullGetReversedLoopIndex(hull, i);
@@ -98,7 +96,6 @@ static Mesh *hull_from_bullet(const Mesh *mesh, Span<float3> coords)
     MEdge &edge = edges[0];
     edge.v1 = 0;
     edge.v2 = 1;
-    edge.flag = ME_EDGEDRAW;
     edge_index++;
   }
   BLI_assert(edge_index == edges_num);
@@ -170,7 +167,7 @@ static Mesh *compute_hull(const GeometrySet &geometry_set)
   if (const Curves *curves_id = geometry_set.get_curves_for_read()) {
     count++;
     span_count++;
-    const bke::CurvesGeometry &curves = bke::CurvesGeometry::wrap(curves_id->geometry);
+    const bke::CurvesGeometry &curves = curves_id->geometry.wrap();
     positions_span = curves.evaluated_positions();
     total_num += positions_span.size();
   }
@@ -205,7 +202,7 @@ static Mesh *compute_hull(const GeometrySet &geometry_set)
   }
 
   if (const Curves *curves_id = geometry_set.get_curves_for_read()) {
-    const bke::CurvesGeometry &curves = bke::CurvesGeometry::wrap(curves_id->geometry);
+    const bke::CurvesGeometry &curves = curves_id->geometry.wrap();
     Span<float3> array = curves.evaluated_positions();
     positions.as_mutable_span().slice(offset, array.size()).copy_from(array);
     offset += array.size();

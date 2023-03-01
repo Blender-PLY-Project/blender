@@ -1171,7 +1171,7 @@ static void do_version_fcurve_hide_viewport_fix(struct ID *UNUSED(id),
   fcu->rna_path = BLI_strdupn("hide_viewport", 13);
 }
 
-void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
+void do_versions_after_linking_280(FileData *fd, Main *bmain)
 {
   bool use_collection_compat_28 = true;
 
@@ -1206,7 +1206,7 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
           }
           if (collection_hidden == NULL) {
             /* This should never happen (objects are always supposed to be instantiated in a
-             * scene), but it does sometimes, see e.g. T81168.
+             * scene), but it does sometimes, see e.g. #81168.
              * Just put them in first hidden collection in those cases. */
             collection_hidden = &hidden_collection_array[0];
           }
@@ -1241,6 +1241,12 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
 
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 0)) {
     for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      BLO_read_assert_message(screen->scene == NULL,
+                              ,
+                              (BlendHandle *)fd,
+                              bmain,
+                              "No Screen data-block should ever have a NULL `scene` pointer");
+
       /* same render-layer as do_version_workspaces_after_lib_link will activate,
        * so same layer as BKE_view_layer_default_view would return */
       ViewLayer *layer = screen->scene->view_layers.first;
@@ -1739,7 +1745,7 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
 /* NOTE: This version patch is intended for versions < 2.52.2,
  * but was initially introduced in 2.27 already.
  * But in 2.79 another case generating non-unique names was discovered
- * (see T55668, involving Meta strips). */
+ * (see #55668, involving Meta strips). */
 static void do_versions_seq_unique_name_all_strips(Scene *sce, ListBase *seqbasep)
 {
   for (Sequence *seq = seqbasep->first; seq != NULL; seq = seq->next) {

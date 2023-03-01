@@ -190,6 +190,9 @@ static int stroke_march_next_point(const bGPDstroke *gps,
                                    float *pressure,
                                    float *strength,
                                    float *vert_color,
+                                   float *uv_fac,
+                                   float *uv_fill,
+                                   float *uv_rot,
                                    float *ratio_result,
                                    int *index_from,
                                    int *index_to)
@@ -271,6 +274,10 @@ static int stroke_march_next_point(const bGPDstroke *gps,
       gps->points[next_point_index].pressure, gps->points[*index_from].pressure, vratio);
   *strength = interpf(
       gps->points[next_point_index].strength, gps->points[*index_from].strength, vratio);
+  *uv_fac = interpf(gps->points[next_point_index].uv_fac, gps->points[*index_from].uv_fac, vratio);
+  *uv_rot = interpf(gps->points[next_point_index].uv_rot, gps->points[*index_from].uv_rot, vratio);
+  interp_v2_v2v2(
+      uv_fill, gps->points[*index_from].uv_fill, gps->points[next_point_index].uv_fill, vratio);
   interp_v4_v4v4(vert_color,
                  gps->points[*index_from].vert_color,
                  gps->points[next_point_index].vert_color,
@@ -474,6 +481,7 @@ bool BKE_gpencil_stroke_sample(bGPdata *gpd,
   int next_point_index = 1;
   int i = 0;
   float pressure, strength, ratio_result;
+  float uv_fac, uv_rot, uv_fill[2];
   float vert_color[4];
   int index_from, index_to;
   float last_coord[3];
@@ -485,7 +493,13 @@ bool BKE_gpencil_stroke_sample(bGPdata *gpd,
   copy_v3_v3(&pt2->x, last_coord);
   new_pt[i].pressure = pt[0].pressure;
   new_pt[i].strength = pt[0].strength;
-  memcpy(new_pt[i].vert_color, pt[0].vert_color, sizeof(float[4]));
+  copy_v3_v3(&pt2->x, last_coord);
+  new_pt[i].pressure = pt[0].pressure;
+  new_pt[i].strength = pt[0].strength;
+  new_pt[i].uv_fac = pt[0].uv_fac;
+  new_pt[i].uv_rot = pt[0].uv_rot;
+  copy_v2_v2(new_pt[i].uv_fill, pt[0].uv_fill);
+  copy_v4_v4(new_pt[i].vert_color, pt[0].vert_color);
   if (select) {
     new_pt[i].flag |= GP_SPOINT_SELECT;
   }
@@ -504,6 +518,9 @@ bool BKE_gpencil_stroke_sample(bGPdata *gpd,
                                                      &pressure,
                                                      &strength,
                                                      vert_color,
+                                                     &uv_fac,
+                                                     uv_fill,
+                                                     &uv_rot,
                                                      &ratio_result,
                                                      &index_from,
                                                      &index_to)) > -1) {
@@ -514,6 +531,10 @@ bool BKE_gpencil_stroke_sample(bGPdata *gpd,
     copy_v3_v3(&pt2->x, last_coord);
     new_pt[i].pressure = pressure;
     new_pt[i].strength = strength;
+    new_pt[i].uv_fac = uv_fac;
+    new_pt[i].uv_rot = uv_rot;
+    copy_v2_v2(new_pt[i].uv_fill, uv_fill);
+
     memcpy(new_pt[i].vert_color, vert_color, sizeof(float[4]));
     if (select) {
       new_pt[i].flag |= GP_SPOINT_SELECT;
@@ -1000,12 +1021,14 @@ bool BKE_gpencil_stroke_smooth_point(bGPDstroke *gps,
     return false;
   }
 
-  /* Overview of the algorithm here and in the following smooth functions:
-   *  The smooth functions return the new attribute in question for a single point.
-   *  The result is stored in r_gps->points[point_index], while the data is read from gps.
-   *  To get a correct result, duplicate the stroke point data and read from the copy,
-   *  while writing to the real stroke. Not doing that will result in acceptable, but
-   *  asymmetric results.
+  /* - Overview of the algorithm here and in the following smooth functions:
+   *
+   *   The smooth functions return the new attribute in question for a single point.
+   *   The result is stored in r_gps->points[point_index], while the data is read from gps.
+   *   To get a correct result, duplicate the stroke point data and read from the copy,
+   *   while writing to the real stroke. Not doing that will result in acceptable, but
+   *   asymmetric results.
+   *
    * This algorithm works as long as all points are being smoothed. If there is
    * points that should not get smoothed, use the old repeat smooth pattern with
    * the parameter "iterations" set to 1 or 2. (2 matches the old algorithm).
@@ -2219,11 +2242,14 @@ void BKE_gpencil_stroke_subdivide(bGPdata *gpd, bGPDstroke *gps, int level, int 
       copy_v3_v3(&pt_final->x, &pt->x);
       pt_final->pressure = pt->pressure;
       pt_final->strength = pt->strength;
+      pt_final->uv_rot = pt->uv_rot;
+      pt_final->uv_fac = pt->uv_fac;
       pt_final->time = pt->time;
       pt_final->flag = pt->flag;
       pt_final->runtime.pt_orig = pt->runtime.pt_orig;
       pt_final->runtime.idx_orig = pt->runtime.idx_orig;
       copy_v4_v4(pt_final->vert_color, pt->vert_color);
+      copy_v4_v4(pt_final->uv_fill, pt->uv_fill);
 
       if (gps->dvert != nullptr) {
         dvert = &temp_dverts[i];
@@ -2242,8 +2268,11 @@ void BKE_gpencil_stroke_subdivide(bGPdata *gpd, bGPDstroke *gps, int level, int 
       interp_v3_v3v3(&pt_final->x, &pt->x, &next->x, 0.5f);
       pt_final->pressure = interpf(pt->pressure, next->pressure, 0.5f);
       pt_final->strength = interpf(pt->strength, next->strength, 0.5f);
+      pt_final->uv_rot = interpf(pt->uv_rot, next->uv_rot, 0.5f);
+      pt_final->uv_fac = interpf(pt->uv_fac, next->uv_fac, 0.5f);
+      interp_v4_v4v4(pt_final->uv_fill, pt->uv_fill, next->uv_fill, 0.5f);
       CLAMP(pt_final->strength, GPENCIL_STRENGTH_MIN, 1.0f);
-      pt_final->time = interpf(pt->time, next->time, 0.5f);
+      pt_final->time = 0;
       pt_final->runtime.pt_orig = nullptr;
       pt_final->flag = 0;
       interp_v4_v4v4(pt_final->vert_color, pt->vert_color, next->vert_color, 0.5f);
@@ -2474,7 +2503,7 @@ static void gpencil_generate_edgeloops(Object *ob,
   const Span<float3> vert_positions = me->vert_positions();
   const Span<MEdge> edges = me->edges();
   const Span<MDeformVert> dverts = me->deform_verts();
-  const float(*vert_normals)[3] = BKE_mesh_vertex_normals_ensure(me);
+  const float(*vert_normals)[3] = BKE_mesh_vert_normals_ensure(me);
 
   /* Arrays for all edge vertices (forward and backward) that form a edge loop.
    * This is reused for each edge-loop to create gpencil stroke. */
@@ -3216,7 +3245,7 @@ bGPDstroke *BKE_gpencil_stroke_delete_tagged_points(bGPdata *gpd,
 
         pts = new_stroke->points;
         for (j = 0; j < new_stroke->totpoints; j++, pts++) {
-          /* Some points have time = 0, so check to not get negative time values.*/
+          /* Some points have time = 0, so check to not get negative time values. */
           pts->time = max_ff(pts->time - delta, 0.0f);
           /* set flag for select again later */
           if (select == true) {

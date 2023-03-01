@@ -93,7 +93,8 @@ SymmetricBlurWeights::SymmetricBlurWeights(int type, float2 radius)
     }
   }
 
-  texture_ = GPU_texture_create_2d("Weights", size.x, size.y, 1, GPU_R16F, weights.data());
+  texture_ = GPU_texture_create_2d(
+      "Weights", size.x, size.y, 1, GPU_R16F, GPU_TEXTURE_USAGE_GENERAL, weights.data());
 }
 
 SymmetricBlurWeights::~SymmetricBlurWeights()
@@ -103,7 +104,7 @@ SymmetricBlurWeights::~SymmetricBlurWeights()
 
 void SymmetricBlurWeights::bind_as_texture(GPUShader *shader, const char *texture_name) const
 {
-  const int texture_image_unit = GPU_shader_get_texture_binding(shader, texture_name);
+  const int texture_image_unit = GPU_shader_get_sampler_binding(shader, texture_name);
   GPU_texture_bind(texture_, texture_image_unit);
 }
 

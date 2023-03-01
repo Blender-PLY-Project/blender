@@ -19,6 +19,8 @@ enum {
   METALRT_FUNC_SHADOW_BOX,
   METALRT_FUNC_LOCAL_TRI,
   METALRT_FUNC_LOCAL_BOX,
+  METALRT_FUNC_LOCAL_TRI_PRIM,
+  METALRT_FUNC_LOCAL_BOX_PRIM,
   METALRT_FUNC_CURVE_RIBBON,
   METALRT_FUNC_CURVE_RIBBON_SHADOW,
   METALRT_FUNC_CURVE_ALL,
@@ -28,7 +30,13 @@ enum {
   METALRT_FUNC_NUM
 };
 
-enum { METALRT_TABLE_DEFAULT, METALRT_TABLE_SHADOW, METALRT_TABLE_LOCAL, METALRT_TABLE_NUM };
+enum {
+  METALRT_TABLE_DEFAULT,
+  METALRT_TABLE_SHADOW,
+  METALRT_TABLE_LOCAL,
+  METALRT_TABLE_LOCAL_PRIM,
+  METALRT_TABLE_NUM
+};
 
 /* Pipeline State Object types */
 enum MetalPipelineType {
@@ -55,8 +63,7 @@ enum MetalPipelineType {
 };
 
 #  define METALRT_FEATURE_MASK \
-    (KERNEL_FEATURE_HAIR | KERNEL_FEATURE_HAIR_THICK | KERNEL_FEATURE_POINTCLOUD | \
-     KERNEL_FEATURE_OBJECT_MOTION)
+    (KERNEL_FEATURE_HAIR | KERNEL_FEATURE_HAIR_THICK | KERNEL_FEATURE_POINTCLOUD)
 
 const char *kernel_type_as_string(MetalPipelineType pso_type);
 
@@ -68,12 +75,12 @@ struct MetalKernelPipeline {
 
   id<MTLLibrary> mtlLibrary = nil;
   MetalPipelineType pso_type;
-  string source_md5;
+  string kernels_md5;
   size_t usage_count = 0;
 
   KernelData kernel_data_;
   bool use_metalrt;
-  uint32_t metalrt_features = 0;
+  uint32_t kernel_features = 0;
 
   int threads_per_threadgroup;
 
@@ -96,7 +103,7 @@ struct MetalKernelPipeline {
 /* Cache of Metal kernels for each DeviceKernel. */
 namespace MetalDeviceKernels {
 
-bool any_specialization_happening_now();
+int num_incomplete_specialization_requests();
 int get_loaded_kernel_count(MetalDevice const *device, MetalPipelineType pso_type);
 bool should_load_kernels(MetalDevice const *device, MetalPipelineType pso_type);
 bool load(MetalDevice *device, MetalPipelineType pso_type);

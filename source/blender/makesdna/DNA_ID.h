@@ -104,6 +104,12 @@ typedef struct IDPropertyUIDataString {
 /** For #IDP_UI_DATA_TYPE_ID. */
 typedef struct IDPropertyUIDataID {
   IDPropertyUIData base;
+  /**
+   * #ID_Type. This type type is not enforced. It is just a hint to the ui for what kind of ID is
+   * expected. If this is zero, any id type is expected.
+   */
+  short id_type;
+  char _pad[6];
 } IDPropertyUIDataID;
 
 typedef struct IDPropertyData {
@@ -266,8 +272,10 @@ enum {
   /** User cannot change that override operation. */
   IDOVERRIDE_LIBRARY_FLAG_LOCKED = 1 << 1,
 
-  /** For overrides of ID pointers: this override still matches (follows) the hierarchy of the
-   *  reference linked data. */
+  /**
+   * For overrides of ID pointers: this override still matches (follows) the hierarchy of the
+   * reference linked data.
+   */
   IDOVERRIDE_LIBRARY_FLAG_IDPOINTER_MATCH_REFERENCE = 1 << 8,
 };
 
@@ -812,7 +820,7 @@ enum {
    * RESET_NEVER
    *
    * \warning This should not be cleared on existing data.
-   * If support for this is needed, see T88026 as this flag controls memory ownership
+   * If support for this is needed, see #88026 as this flag controls memory ownership
    * of physics *shared* pointers.
    */
   LIB_TAG_COPIED_ON_WRITE = 1 << 12,

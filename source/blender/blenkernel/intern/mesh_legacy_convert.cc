@@ -89,7 +89,6 @@ static void mesh_calc_edges_mdata(const MVert * /*allvert*/,
                                   int totface,
                                   int /*totloop*/,
                                   int totpoly,
-                                  const bool use_old,
                                   MEdge **r_medge,
                                   int *r_totedge)
 {
@@ -156,9 +155,6 @@ static void mesh_calc_edges_mdata(const MVert * /*allvert*/,
     if (ed->v1 != (ed + 1)->v1 || ed->v2 != (ed + 1)->v2) {
       med->v1 = ed->v1;
       med->v2 = ed->v2;
-      if (use_old == false || ed->is_draw) {
-        med->flag = ME_EDGEDRAW;
-      }
 
       /* order is swapped so extruding this edge as a surface won't flip face normals
        * with cyclic curves */
@@ -175,7 +171,6 @@ static void mesh_calc_edges_mdata(const MVert * /*allvert*/,
   /* last edge */
   med->v1 = ed->v1;
   med->v2 = ed->v2;
-  med->flag = ME_EDGEDRAW;
 
   MEM_freeN(edsort);
 
@@ -206,7 +201,7 @@ static void mesh_calc_edges_mdata(const MVert * /*allvert*/,
   *r_totedge = totedge_final;
 }
 
-void BKE_mesh_calc_edges_legacy(Mesh *me, const bool use_old)
+void BKE_mesh_calc_edges_legacy(Mesh *me)
 {
   using namespace blender;
   MEdge *medge;
@@ -224,7 +219,6 @@ void BKE_mesh_calc_edges_legacy(Mesh *me, const bool use_old)
                         me->totface,
                         loops.size(),
                         polys.size(),
-                        use_old,
                         &medge,
                         &totedge);
 
@@ -657,7 +651,7 @@ static void mesh_ensure_tessellation_customdata(Mesh *me)
 {
   if (UNLIKELY((me->totface != 0) && (me->totpoly == 0))) {
     /* Pass, otherwise this function  clears 'mface' before
-     * versioning 'mface -> mpoly' code kicks in T30583.
+     * versioning 'mface -> mpoly' code kicks in #30583.
      *
      * Callers could also check but safer to do here - campbell */
   }
@@ -1224,16 +1218,26 @@ void BKE_mesh_tessface_ensure(struct Mesh *mesh)
 /** \name Face Set Conversion
  * \{ */
 
-void BKE_mesh_legacy_face_set_from_generic(Mesh *mesh,
-                                           blender::MutableSpan<CustomDataLayer> poly_layers)
+void BKE_mesh_legacy_face_set_from_generic(blender::MutableSpan<CustomDataLayer> poly_layers)
 {
   using namespace blender;
+  bool changed = false;
   for (CustomDataLayer &layer : poly_layers) {
     if (StringRef(layer.name) == ".sculpt_face_set") {
       layer.type = CD_SCULPT_FACE_SETS;
+      layer.name[0] = '\0';
+      changed = true;
+      break;
     }
   }
-  CustomData_update_typemap(&mesh->pdata);
+  if (!changed) {
+    return;
+  }
+  /* #CustomData expects the layers to be sorted in increasing order based on type. */
+  std::stable_sort(
+      poly_layers.begin(),
+      poly_layers.end(),
+      [](const CustomDataLayer &a, const CustomDataLayer &b) { return a.type < b.type; });
 }
 
 void BKE_mesh_legacy_face_set_to_generic(Mesh *mesh)
@@ -1242,13 +1246,19 @@ void BKE_mesh_legacy_face_set_to_generic(Mesh *mesh)
   if (mesh->attributes().contains(".sculpt_face_set")) {
     return;
   }
-  for (CustomDataLayer &layer : MutableSpan(mesh->pdata.layers, mesh->pdata.totlayer)) {
-    if (layer.type == CD_SCULPT_FACE_SETS) {
-      BLI_strncpy(layer.name, ".sculpt_face_set", sizeof(layer.name));
-      layer.type = CD_PROP_INT32;
+  void *faceset_data = nullptr;
+  for (const int i : IndexRange(mesh->pdata.totlayer)) {
+    if (mesh->pdata.layers[i].type == CD_SCULPT_FACE_SETS) {
+      faceset_data = mesh->pdata.layers[i].data;
+      mesh->pdata.layers[i].data = nullptr;
+      CustomData_free_layer(&mesh->pdata, CD_SCULPT_FACE_SETS, mesh->totpoly, i);
+      break;
     }
   }
-  CustomData_update_typemap(&mesh->pdata);
+  if (faceset_data != nullptr) {
+    CustomData_add_layer_named(
+        &mesh->pdata, CD_PROP_INT32, CD_ASSIGN, faceset_data, mesh->totpoly, ".sculpt_face_set");
+  }
 }
 
 /** \} */
@@ -1548,7 +1558,6 @@ void BKE_mesh_legacy_convert_uvs_to_struct(
 {
   using namespace blender;
   using namespace blender::bke;
-  const AttributeAccessor attributes = mesh->attributes();
   Vector<CustomDataLayer, 16> new_layer_to_write;
 
   /* Don't write the boolean UV map sublayers which will be written in the legacy #MLoopUV type. */
@@ -1581,23 +1590,29 @@ void BKE_mesh_legacy_convert_uvs_to_struct(
     mloopuv_layer.data = mloopuv.data();
 
     char buffer[MAX_CUSTOMDATA_LAYER_NAME];
-    const VArray<bool> vert_selection = attributes.lookup_or_default<bool>(
-        BKE_uv_map_vert_select_name_get(layer.name, buffer), ATTR_DOMAIN_CORNER, false);
-    const VArray<bool> edge_selection = attributes.lookup_or_default<bool>(
-        BKE_uv_map_edge_select_name_get(layer.name, buffer), ATTR_DOMAIN_CORNER, false);
-    const VArray<bool> pin = attributes.lookup_or_default<bool>(
-        BKE_uv_map_pin_name_get(layer.name, buffer), ATTR_DOMAIN_CORNER, false);
+    const bool *vert_selection = static_cast<const bool *>(CustomData_get_layer_named(
+        &mesh->ldata, CD_PROP_BOOL, BKE_uv_map_vert_select_name_get(layer.name, buffer)));
+    const bool *edge_selection = static_cast<const bool *>(CustomData_get_layer_named(
+        &mesh->ldata, CD_PROP_BOOL, BKE_uv_map_edge_select_name_get(layer.name, buffer)));
+    const bool *pin = static_cast<const bool *>(CustomData_get_layer_named(
+        &mesh->ldata, CD_PROP_BOOL, BKE_uv_map_pin_name_get(layer.name, buffer)));
 
     threading::parallel_for(mloopuv.index_range(), 2048, [&](IndexRange range) {
       for (const int i : range) {
         copy_v2_v2(mloopuv[i].uv, coords[i]);
-        SET_FLAG_FROM_TEST(mloopuv[i].flag, vert_selection[i], MLOOPUV_VERTSEL);
-        SET_FLAG_FROM_TEST(mloopuv[i].flag, edge_selection[i], MLOOPUV_EDGESEL);
-        SET_FLAG_FROM_TEST(mloopuv[i].flag, pin[i], MLOOPUV_PINNED);
+        SET_FLAG_FROM_TEST(mloopuv[i].flag, vert_selection && vert_selection[i], MLOOPUV_VERTSEL);
+        SET_FLAG_FROM_TEST(mloopuv[i].flag, edge_selection && edge_selection[i], MLOOPUV_EDGESEL);
+        SET_FLAG_FROM_TEST(mloopuv[i].flag, pin && pin[i], MLOOPUV_PINNED);
       }
     });
     new_layer_to_write.append(mloopuv_layer);
   }
+
+  /* #CustomData expects the layers to be sorted in increasing order based on type. */
+  std::stable_sort(
+      new_layer_to_write.begin(),
+      new_layer_to_write.end(),
+      [](const CustomDataLayer &a, const CustomDataLayer &b) { return a.type < b.type; });
 
   loop_layers_to_write = new_layer_to_write;
   mesh->ldata.totlayer = new_layer_to_write.size();

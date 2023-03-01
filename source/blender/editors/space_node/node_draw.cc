@@ -51,6 +51,7 @@
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
+#include "GPU_shader_shared.h"
 #include "GPU_state.h"
 #include "GPU_viewport.h"
 
@@ -267,6 +268,9 @@ void node_sort(bNodeTree &ntree)
     ntree.runtime->nodes_by_id.add_new(sort_nodes[i]);
     sort_nodes[i]->runtime->index_in_tree = i;
   }
+
+  /* Nodes have been reordered; the socket locations are invalid until the node tree is redrawn. */
+  ntree.runtime->all_socket_locations.clear();
 }
 
 static Array<uiBlock *> node_uiblocks_init(const bContext &C, const Span<bNode *> nodes)
@@ -3177,16 +3181,16 @@ static void draw_nodetree(const bContext &C,
   else if (ntree.type == NTREE_COMPOSIT) {
     tree_draw_ctx.used_by_realtime_compositor = realtime_compositor_is_in_use(C);
   }
-  snode->runtime->all_socket_locations.reinitialize(ntree.all_sockets().size());
+  ntree.runtime->all_socket_locations.reinitialize(ntree.all_sockets().size());
 
   node_update_nodetree(
-      C, tree_draw_ctx, ntree, nodes, blocks, snode->runtime->all_socket_locations);
+      C, tree_draw_ctx, ntree, nodes, blocks, ntree.runtime->all_socket_locations);
   node_draw_nodetree(C,
                      tree_draw_ctx,
                      region,
                      *snode,
                      ntree,
-                     snode->runtime->all_socket_locations,
+                     ntree.runtime->all_socket_locations,
                      nodes,
                      blocks,
                      parent_key);

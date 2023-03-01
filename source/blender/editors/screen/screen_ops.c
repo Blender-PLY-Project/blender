@@ -2742,7 +2742,7 @@ static void region_scale_validate_size(RegionMoveData *rmd)
 static void region_scale_toggle_hidden(bContext *C, RegionMoveData *rmd)
 {
   /* hidden areas may have bad 'View2D.cur' value,
-   * correct before displaying. see T45156 */
+   * correct before displaying. see #45156 */
   if (rmd->region->flag & RGN_FLAG_HIDDEN) {
     UI_view2d_curRect_validate(&rmd->region->v2d);
   }
@@ -3946,7 +3946,7 @@ static int region_quadview_exec(bContext *C, wmOperator *op)
       rv3d->viewlock_quad = RV3D_VIEWLOCK_INIT;
       rv3d->viewlock = 0;
 
-      /* FIXME: This fixes missing update to workbench TAA. (see T76216)
+      /* FIXME: This fixes missing update to workbench TAA. (see #76216)
        * However, it would be nice if the tagging should be done in a more conventional way. */
       rv3d->rflag |= RV3D_GPULIGHT_UPDATE;
 
@@ -3988,7 +3988,7 @@ static int region_quadview_exec(bContext *C, wmOperator *op)
 
       /* run ED_view3d_lock() so the correct 'rv3d->viewquat' is set,
        * otherwise when restoring rv3d->localvd the 'viewquat' won't
-       * match the 'view', set on entering localview See: T26315,
+       * match the 'view', set on entering localview See: #26315,
        *
        * We could avoid manipulating rv3d->localvd here if exiting
        * localview with a 4-split would assign these view locks */
@@ -5749,7 +5749,8 @@ static void keymap_modal_set(wmKeyConfig *keyconf)
 static bool blend_file_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
 {
   if (drag->type == WM_DRAG_PATH) {
-    if (ELEM(drag->icon, ICON_FILE_BLEND, ICON_FILE_BACKUP, ICON_BLENDER)) {
+    const eFileSel_File_Types file_type = WM_drag_get_path_file_type(drag);
+    if (ELEM(file_type, FILE_TYPE_BLENDER, FILE_TYPE_BLENDER_BACKUP)) {
       return true;
     }
   }
@@ -5759,7 +5760,7 @@ static bool blend_file_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEven
 static void blend_file_drop_copy(bContext *UNUSED(C), wmDrag *drag, wmDropBox *drop)
 {
   /* copy drag path to properties */
-  RNA_string_set(drop->ptr, "filepath", drag->path);
+  RNA_string_set(drop->ptr, "filepath", WM_drag_get_path(drag));
 }
 
 void ED_keymap_screen(wmKeyConfig *keyconf)

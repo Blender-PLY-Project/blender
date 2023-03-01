@@ -352,7 +352,7 @@ struct StaticOrHeapIntStorage {
 
 static void static_or_heap_storage_init(StaticOrHeapIntStorage *storage)
 {
-  storage->static_storage_len = sizeof(storage->static_storage) / sizeof(*storage->static_storage);
+  storage->static_storage_len = ARRAY_SIZE(storage->static_storage);
   storage->heap_storage = nullptr;
   storage->heap_storage_len = 0;
 }
@@ -614,7 +614,7 @@ Mesh *BKE_subdiv_to_ccg_mesh(Subdiv *subdiv,
   if (subdiv_ccg == nullptr) {
     return nullptr;
   }
-  Mesh *result = BKE_mesh_new_nomain_from_template(coarse_mesh, 0, 0, 0, 0, 0);
+  Mesh *result = BKE_mesh_new_nomain_from_template(coarse_mesh, 0, 0, 0, 0);
   result->runtime->subdiv_ccg = subdiv_ccg;
   return result;
 }

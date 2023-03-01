@@ -105,7 +105,6 @@ MeshRuntime::~MeshRuntime()
   if (this->shrinkwrap_data) {
     BKE_shrinkwrap_boundary_data_free(this->shrinkwrap_data);
   }
-  MEM_SAFE_FREE(this->subsurf_face_dot_tags);
 }
 
 }  // namespace blender::bke
@@ -125,7 +124,9 @@ const blender::bke::LooseEdgeCache &Mesh::loose_edges() const
         count--;
       }
     }
-
+    if (count == 0) {
+      loose_edges.clear_and_shrink();
+    }
     r_data.count = count;
   });
 
@@ -136,7 +137,7 @@ void Mesh::loose_edges_tag_none() const
 {
   using namespace blender::bke;
   this->runtime->loose_edges_cache.ensure([&](LooseEdgeCache &r_data) {
-    r_data.is_loose_bits.resize(0);
+    r_data.is_loose_bits.clear_and_shrink();
     r_data.count = 0;
   });
 }
@@ -230,10 +231,11 @@ void BKE_mesh_runtime_clear_geometry(Mesh *mesh)
   mesh->runtime->bounds_cache.tag_dirty();
   mesh->runtime->loose_edges_cache.tag_dirty();
   mesh->runtime->looptris_cache.tag_dirty();
+  mesh->runtime->subsurf_face_dot_tags.clear_and_shrink();
+  mesh->runtime->subsurf_optimal_display_edges.clear_and_shrink();
   if (mesh->runtime->shrinkwrap_data) {
     BKE_shrinkwrap_boundary_data_free(mesh->runtime->shrinkwrap_data);
   }
-  MEM_SAFE_FREE(mesh->runtime->subsurf_face_dot_tags);
 }
 
 void BKE_mesh_tag_edges_split(struct Mesh *mesh)
@@ -245,13 +247,14 @@ void BKE_mesh_tag_edges_split(struct Mesh *mesh)
   free_normals(*mesh->runtime);
   free_subdiv_ccg(*mesh->runtime);
   mesh->runtime->loose_edges_cache.tag_dirty();
+  mesh->runtime->subsurf_face_dot_tags.clear_and_shrink();
+  mesh->runtime->subsurf_optimal_display_edges.clear_and_shrink();
   if (mesh->runtime->shrinkwrap_data) {
     BKE_shrinkwrap_boundary_data_free(mesh->runtime->shrinkwrap_data);
   }
-  MEM_SAFE_FREE(mesh->runtime->subsurf_face_dot_tags);
 }
 
-void BKE_mesh_tag_coords_changed(Mesh *mesh)
+void BKE_mesh_tag_positions_changed(Mesh *mesh)
 {
   BKE_mesh_normals_tag_dirty(mesh);
   free_bvh_cache(*mesh->runtime);
@@ -259,7 +262,7 @@ void BKE_mesh_tag_coords_changed(Mesh *mesh)
   mesh->runtime->bounds_cache.tag_dirty();
 }
 
-void BKE_mesh_tag_coords_changed_uniformly(Mesh *mesh)
+void BKE_mesh_tag_positions_changed_uniformly(Mesh *mesh)
 {
   /* The normals and triangulation didn't change, since all verts moved by the same amount. */
   free_bvh_cache(*mesh->runtime);

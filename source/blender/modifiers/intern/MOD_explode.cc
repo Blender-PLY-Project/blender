@@ -739,7 +739,8 @@ static Mesh *cutEdges(ExplodeModifierData *emd, Mesh *mesh)
     totfsplit += add_faces[*fs];
   }
 
-  split_m = BKE_mesh_new_nomain_from_template(mesh, totesplit, 0, totface + totfsplit, 0, 0);
+  split_m = BKE_mesh_new_nomain_from_template_ex(
+      mesh, totesplit, 0, totface + totfsplit, 0, 0, CD_MASK_EVERYTHING);
 
   layers_num = CustomData_number_of_layers(&split_m->fdata, CD_MTFACE);
 
@@ -752,7 +753,7 @@ static Mesh *cutEdges(ExplodeModifierData *emd, Mesh *mesh)
 
   /* override original facepa (original pointer is saved in caller function) */
 
-  /* TODO(@campbellbarton): `(totfsplit * 2)` over allocation is used since the quads are
+  /* TODO(@ideasman42): `(totfsplit * 2)` over allocation is used since the quads are
    * later interpreted as tri's, for this to work right I think we probably
    * have to stop using tessface. */
 
@@ -986,7 +987,8 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
   BLI_edgehashIterator_free(ehi);
 
   /* the final duplicated vertices */
-  explode = BKE_mesh_new_nomain_from_template(mesh, totdup, 0, totface - delface, 0, 0);
+  explode = BKE_mesh_new_nomain_from_template_ex(
+      mesh, totdup, 0, totface - delface, 0, 0, CD_MASK_EVERYTHING);
 
   MTFace *mtface = static_cast<MTFace *>(CustomData_get_layer_named_for_write(
       &explode->fdata, CD_MTFACE, emd->uvname, explode->totface));
@@ -1125,7 +1127,7 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
 static ParticleSystemModifierData *findPrecedingParticlesystem(Object *ob, ModifierData *emd)
 {
   ModifierData *md;
-  ParticleSystemModifierData *psmd = NULL;
+  ParticleSystemModifierData *psmd = nullptr;
 
   for (md = static_cast<ModifierData *>(ob->modifiers.first); emd != md; md = md->next) {
     if (md->type == eModifierType_ParticleSystem) {

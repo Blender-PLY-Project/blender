@@ -48,7 +48,7 @@ Object *MeshFromGeometry::create_mesh(Main *bmain,
   const int64_t tot_face_elems{mesh_geometry_.face_elements_.size()};
   const int64_t tot_loops{mesh_geometry_.total_loops_};
 
-  Mesh *mesh = BKE_mesh_new_nomain(tot_verts_object, tot_edges, 0, tot_loops, tot_face_elems);
+  Mesh *mesh = BKE_mesh_new_nomain(tot_verts_object, tot_edges, tot_loops, tot_face_elems);
   Object *obj = BKE_object_add_only_object(bmain, OB_MESH, ob_name.c_str());
   obj->data = BKE_object_obdata_add_from_type(bmain, OB_MESH, ob_name.c_str());
 
@@ -86,6 +86,7 @@ void MeshFromGeometry::fixup_invalid_faces()
       /* Skip and remove faces that have fewer than 3 corners. */
       mesh_geometry_.total_loops_ -= curr_face.corner_count_;
       mesh_geometry_.face_elements_.remove_and_reorder(face_idx);
+      --face_idx;
       continue;
     }
 
@@ -128,6 +129,7 @@ void MeshFromGeometry::fixup_invalid_faces()
     /* Remove the invalid face. */
     mesh_geometry_.total_loops_ -= curr_face.corner_count_;
     mesh_geometry_.face_elements_.remove_and_reorder(face_idx);
+    --face_idx;
 
     Vector<Vector<int>> new_faces = fixup_invalid_polygon(global_vertices_.vertices, face_verts);
 
@@ -286,7 +288,7 @@ void MeshFromGeometry::create_uv_verts(Mesh *mesh)
         added_uv = true;
       }
       else {
-        uv_map.span[tot_loop_idx] = {0.f, 0.f};
+        uv_map.span[tot_loop_idx] = {0.0f, 0.0f};
       }
       tot_loop_idx++;
     }
@@ -356,7 +358,7 @@ void MeshFromGeometry::create_materials(Main *bmain,
 void MeshFromGeometry::create_normals(Mesh *mesh)
 {
   /* No normal data: nothing to do. */
-  if (global_vertices_.vertex_normals.is_empty()) {
+  if (global_vertices_.vert_normals.is_empty()) {
     return;
   }
   /* Custom normals can only be stored on face corners. */
@@ -373,7 +375,7 @@ void MeshFromGeometry::create_normals(Mesh *mesh)
       int n_index = curr_corner.vertex_normal_index;
       float3 normal(0, 0, 0);
       if (n_index >= 0) {
-        normal = global_vertices_.vertex_normals[n_index];
+        normal = global_vertices_.vert_normals[n_index];
       }
       copy_v3_v3(loop_normals[tot_loop_idx], normal);
       tot_loop_idx++;
@@ -399,6 +401,7 @@ void MeshFromGeometry::create_colors(Mesh *mesh)
       CustomDataLayer *color_layer = BKE_id_attribute_new(
           &mesh->id, "Color", CD_PROP_COLOR, ATTR_DOMAIN_POINT, nullptr);
       BKE_id_attributes_active_color_set(&mesh->id, color_layer->name);
+      BKE_id_attributes_default_color_set(&mesh->id, color_layer->name);
       float4 *colors = (float4 *)color_layer->data;
       int offset = mesh_geometry_.vertex_index_min_ - block.start_vertex_index;
       for (int i = 0, n = mesh_geometry_.get_vertex_count(); i != n; ++i) {

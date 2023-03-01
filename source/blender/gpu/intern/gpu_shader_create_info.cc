@@ -346,7 +346,7 @@ void gpu_shader_create_info_init()
     overlay_motion_path_line_clipped = overlay_motion_path_line_clipped_no_geom;
 
     /* Workbench shadows.
-     * Note: Updates additional-info used by workbench shadow permutations.
+     * NOTE: Updates additional-info used by workbench shadow permutations.
      * Must be prepared prior to permutation preparation. */
     workbench_shadow_manifold = workbench_shadow_manifold_no_geom;
     workbench_shadow_no_manifold = workbench_shadow_no_manifold_no_geom;
@@ -379,6 +379,9 @@ void gpu_shader_create_info_init()
 
     /* EEVEE Volumetric Material */
     eevee_legacy_material_volumetric_vert = eevee_legacy_material_volumetric_vert_no_geom;
+
+    /* GPencil stroke. */
+    gpu_shader_gpencil_stroke = gpu_shader_gpencil_stroke_no_geom;
   }
 #endif
 

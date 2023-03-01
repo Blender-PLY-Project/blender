@@ -410,7 +410,7 @@ static void version_node_socket_duplicate(bNodeTree *ntree,
   }
 }
 
-void do_versions_after_linking_290(Main *bmain, ReportList * /*reports*/)
+void do_versions_after_linking_290(FileData * /*fd*/, Main *bmain)
 {
   if (!MAIN_VERSION_ATLEAST(bmain, 290, 1)) {
     /* Patch old grease pencil modifiers material filter. */
@@ -721,7 +721,7 @@ static void do_versions_point_attributes(CustomData *pdata)
 
 static void do_versions_point_attribute_names(CustomData *pdata)
 {
-  /* Change from capital initial letter to lower case (T82693). */
+  /* Change from capital initial letter to lower case (#82693). */
   for (int i = 0; i < pdata->totlayer; i++) {
     CustomDataLayer *layer = &pdata->layers[i];
     if (layer->type == CD_PROP_FLOAT3 && STREQ(layer->name, "Position")) {
@@ -816,20 +816,21 @@ void blo_do_versions_290(FileData *fd, Library * /*lib*/, Main *bmain)
   if (MAIN_VERSION_ATLEAST(bmain, 290, 2) && MAIN_VERSION_OLDER(bmain, 291, 1)) {
     /* In this range, the extrude manifold could generate meshes with degenerated face. */
     LISTBASE_FOREACH (Mesh *, me, &bmain->meshes) {
-      for (const MPoly *mp = BKE_mesh_polys(me), *mp_end = mp + me->totpoly; mp < mp_end; mp++) {
-        if (mp->totloop == 2) {
+      blender::MutableSpan<MPoly> polys = me->polys_for_write();
+      for (const int i : polys.index_range()) {
+        if (polys[i].totloop == 2) {
           bool changed;
           BKE_mesh_validate_arrays(
               me,
               BKE_mesh_vert_positions_for_write(me),
               me->totvert,
-              BKE_mesh_edges_for_write(me),
+              me->edges_for_write().data(),
               me->totedge,
               (MFace *)CustomData_get_layer_for_write(&me->fdata, CD_MFACE, me->totface),
               me->totface,
               BKE_mesh_loops_for_write(me),
-              me->totloop,
-              BKE_mesh_polys_for_write(me),
+              polys.size(),
+              polys.data(),
               me->totpoly,
               BKE_mesh_deform_verts_for_write(me),
               false,
@@ -841,7 +842,7 @@ void blo_do_versions_290(FileData *fd, Library * /*lib*/, Main *bmain)
     }
   }
 
-  /** Repair files from duplicate brushes added to blend files, see: T76738. */
+  /** Repair files from duplicate brushes added to blend files, see: #76738. */
   if (!MAIN_VERSION_ATLEAST(bmain, 290, 2)) {
     {
       short id_codes[] = {ID_BR, ID_PAL};
@@ -1156,7 +1157,7 @@ void blo_do_versions_290(FileData *fd, Library * /*lib*/, Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 291, 5)) {
-    /* Fix fcurves to allow for new bezier handles behavior (T75881 and D8752). */
+    /* Fix fcurves to allow for new bezier handles behavior (#75881 and D8752). */
     LISTBASE_FOREACH (bAction *, act, &bmain->actions) {
       LISTBASE_FOREACH (FCurve *, fcu, &act->curves) {
         /* Only need to fix Bezier curves with at least 2 key-frames. */

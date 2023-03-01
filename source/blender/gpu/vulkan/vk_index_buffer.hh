@@ -9,20 +9,30 @@
 
 #include "gpu_index_buffer_private.hh"
 
+#include "vk_buffer.hh"
+
 namespace blender::gpu {
 
 class VKIndexBuffer : public IndexBuf {
+  VKBuffer buffer_;
+
  public:
   void upload_data() override;
 
   void bind_as_ssbo(uint binding) override;
 
-  const uint32_t *read() const override;
+  void read(uint32_t *data) const override;
 
   void update_sub(uint start, uint len, const void *data) override;
 
+  VkBuffer vk_handle()
+  {
+    return buffer_.vk_handle();
+  }
+
  private:
   void strip_restart_indices() override;
+  void allocate(VKContext &context);
 };
 
 }  // namespace blender::gpu

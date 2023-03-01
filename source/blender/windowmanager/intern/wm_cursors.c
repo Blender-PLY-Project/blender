@@ -173,7 +173,7 @@ void WM_cursor_set(wmWindow *win, int curs)
 
 bool WM_cursor_set_from_tool(struct wmWindow *win, const ScrArea *area, const ARegion *region)
 {
-  if (region && (region->regiontype != RGN_TYPE_WINDOW)) {
+  if (region && !ELEM(region->regiontype, RGN_TYPE_WINDOW, RGN_TYPE_PREVIEW)) {
     return false;
   }
 
@@ -291,7 +291,7 @@ void WM_cursor_grab_disable(wmWindow *win, const int mouse_ungrab_xy[2])
 
 static void wm_cursor_warp_relative(wmWindow *win, int x, int y)
 {
-  /* NOTE: don't use wmEvent coords because of continuous grab T36409. */
+  /* NOTE: don't use wmEvent coords because of continuous grab #36409. */
   int cx, cy;
   wm_cursor_position_get(win, &cx, &cy);
   WM_cursor_warp(win, cx + x, cy + y);
@@ -384,7 +384,7 @@ void WM_cursor_time(wmWindow *win, int nr)
  *
  * There is a nice Python GUI utility that can be used for drawing cursors in
  * this format in the Blender source distribution, in
- * `./source/tools/utils/make_cursor_gui.py` .
+ * `./tools/utils/make_cursor_gui.py` .
  *
  * Start it with the command `python3 make_cursor_gui.py`
  * It will copy its output to the console when you press 'Do it'.
